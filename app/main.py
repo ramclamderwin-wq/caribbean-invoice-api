@@ -97,7 +97,7 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
     def amount(labels: str) -> str | None:
         value = _first_match(
             [
-                rf"(?:{labels})\s*[:\-]?\s*(?:BZD|USD|BZ\$|\$)?\s*([(\-]?\s*\d[\d,]*(?:\.\d{1,4})?\s*\)?)"
+                rf"\b(?:{labels})\b\s*[:\-]?\s*(?:BZD|USD|BZ\$|\$)?\s*([(\-]?\s*\d[\d,]*(?:\.\d{1,4})?\s*\)?)"
             ],
             text,
         )
