@@ -62,7 +62,7 @@ def _money(value: str | None) -> str | None:
     cleaned = value.strip().replace(",", "")
     cleaned = re.sub(r"^[A-Z]{3}\s*", "", cleaned, flags=re.IGNORECASE)
     cleaned = cleaned.replace("$", "").replace("BZD", "").replace("USD", "").strip()
-    match = re.search(r"-?\d+(?:\.\d{1,4})?", cleaned)
+    match = re.search(r"-?\d+(?:\.\d{{1,4}})?", cleaned)
     if not match:
         return None
     try:
