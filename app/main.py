@@ -75,7 +75,7 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
     text = _clean_text(raw_text)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     invoice_number = _first_match(
-        [r"(?:invoice\s*(?:number|no\.?|#|num(?:ber)?)|inv\s*#?)\s*[:#\-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"],
+        [r"(?:invoice\s*(?:number|no\.?|#|num(?:ber)?)|inv\b\s*#?)\s*[:#\-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"],
         text,
     )
     invoice_date = _first_match(
