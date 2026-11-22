@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, Field
 
-APP_NAME = "Caribbean Invoice Intelligence API"
+APP_NAME = "Invoice Intelligence API"
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "20"))
 MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "25000000"))
@@ -192,7 +192,7 @@ def root() -> dict[str, str]:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "caribbean-invoice-api"}
+    return {"status": "ok", "service": "invoice-intelligence-api"}
 
 
 @app.post("/v1/extract-text")
