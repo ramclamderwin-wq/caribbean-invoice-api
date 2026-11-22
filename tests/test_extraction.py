@@ -1,21 +1,21 @@
 from app.main import extract_invoice_fields
 
 
-def test_extracts_basic_belize_invoice():
-    text = """CARIBBEAN SUPPLIES LTD
+def test_extracts_basic_invoice():
+    text = """NORTHSTAR SUPPLIES LLC
 INVOICE
 Invoice No: CS-1048
 Date: 2026-11-15
-Currency: BZD
+Currency: USD
 Subtotal: 100.00
 Tax: 12.50
 Grand Total: 112.50
 """
     result = extract_invoice_fields(text)
-    assert result["fields"]["supplier_name"] == "CARIBBEAN SUPPLIES LTD"
+    assert result["fields"]["supplier_name"] == "NORTHSTAR SUPPLIES LLC"
     assert result["fields"]["invoice_number"] == "CS-1048"
     assert result["fields"]["invoice_date"] == "2026-11-15"
-    assert result["fields"]["currency"] == "BZD"
+    assert result["fields"]["currency"] == "USD"
     assert result["fields"]["subtotal"] == "100.00"
     assert result["fields"]["tax"] == "12.50"
     assert result["fields"]["total"] == "112.50"
