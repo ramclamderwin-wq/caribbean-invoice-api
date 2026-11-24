@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from datetime import datetime, timezone, timedelta
 
-import pymupdf as fitz
+import pypdfium2 as pdfium
 import pytesseract
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -231,40 +231,52 @@ def _ocr_image(image: Image.Image) -> str:
 
 def _extract_pdf(data: bytes) -> tuple[str, bool, int]:
     try:
-        document = fitz.open(stream=data, filetype="pdf")
+        document = pdfium.PdfDocument(data)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="The uploaded PDF is invalid or unreadable.") from exc
     try:
-        if document.page_count > MAX_PDF_PAGES:
+        page_count = len(document)
+        if page_count > MAX_PDF_PAGES:
             raise HTTPException(status_code=413, detail=f"PDF exceeds the {MAX_PDF_PAGES}-page limit.")
         chunks: list[str] = []
         used_ocr = False
         ocr_pages = 0
-        for page in document:
-            page_text = page.get_text("text").strip()
-            if len(page_text) < 20:
-                ocr_pages += 1
-                if ocr_pages > MAX_OCR_PAGES:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"PDF exceeds the {MAX_OCR_PAGES}-page OCR limit.",
-                    )
-                rect = page.rect
-                estimated_pixels = max(1, int(rect.width * 2)) * max(1, int(rect.height * 2))
-                if estimated_pixels > MAX_PDF_PAGE_PIXELS:
-                    raise HTTPException(
-                        status_code=413,
-                        detail="A PDF page is too large to rasterise safely.",
-                    )
-                _require_tesseract()
-                pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-                if pixmap.width * pixmap.height > MAX_PDF_PAGE_PIXELS:
-                    raise HTTPException(status_code=413, detail="A PDF page exceeds the OCR pixel limit.")
-                with Image.open(io.BytesIO(pixmap.tobytes("png"))) as page_image:
-                    page_text = _ocr_image(page_image)
-                used_ocr = True
-            chunks.append(page_text)
-        return "\n".join(chunks), used_ocr, document.page_count
+        for page_index in range(page_count):
+            page = document[page_index]
+            try:
+                text_page = page.get_textpage()
+                try:
+                    page_text = text_page.get_text_bounded().strip()
+                finally:
+                    text_page.close()
+                if len(page_text) < 20:
+                    ocr_pages += 1
+                    if ocr_pages > MAX_OCR_PAGES:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"PDF exceeds the {MAX_OCR_PAGES}-page OCR limit.",
+                        )
+                    width, height = page.get_size()
+                    estimated_pixels = max(1, int(width * 2)) * max(1, int(height * 2))
+                    if estimated_pixels > MAX_PDF_PAGE_PIXELS:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="A PDF page is too large to rasterise safely.",
+                        )
+                    _require_tesseract()
+                    bitmap = page.render(scale=2)
+                    try:
+                        if bitmap.width * bitmap.height > MAX_PDF_PAGE_PIXELS:
+                            raise HTTPException(status_code=413, detail="A PDF page exceeds the OCR pixel limit.")
+                        page_image = bitmap.to_pil()
+                        page_text = _ocr_image(page_image)
+                    finally:
+                        bitmap.close()
+                    used_ocr = True
+                chunks.append(page_text)
+            finally:
+                page.close()
+        return "\n".join(chunks), used_ocr, page_count
     finally:
         document.close()
 
