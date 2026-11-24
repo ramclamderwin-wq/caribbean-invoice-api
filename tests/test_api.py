@@ -232,3 +232,15 @@ def test_non_timeout_ocr_runtime_error_is_not_misreported(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         main._ocr_image(image)
     assert exc.value.status_code == 500
+
+
+def test_legacy_past_due_key_without_timestamp_is_not_granted_indefinite_grace(client):
+    from app.security import get_key_record, set_subscription, _connect
+    key = _auth_headers("legacy-past-due")["Authorization"].split(" ", 1)[1]
+    record = get_key_record(key)
+    set_subscription(record["id"], "starter", "past_due", "cus_legacy", "sub_legacy", 100)
+    with _connect() as conn:
+        conn.execute("UPDATE api_keys SET past_due_since=NULL WHERE id=?", (record["id"],))
+    response = client.get("/v1/usage", headers={"Authorization": f"Bearer {key}"})
+    assert response.status_code == 402
+    assert get_key_record(key)["active"] == 0
