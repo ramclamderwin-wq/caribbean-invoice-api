@@ -49,3 +49,36 @@ def send_api_key_email(recipient: str, api_key: str) -> None:
         raise RuntimeError(f"Email provider rejected the delivery (HTTP {exc.code}).") from exc
     except URLError as exc:
         raise RuntimeError("Email provider could not be reached.") from exc
+
+
+
+def send_recovery_code_email(recipient: str, code: str) -> None:
+    api_token = os.getenv("RESEND_API_KEY")
+    sender = os.getenv("FROM_EMAIL")
+    if not api_token or not sender:
+        raise RuntimeError("RESEND_API_KEY and FROM_EMAIL must be configured for account recovery.")
+    payload = {
+        "from": sender,
+        "to": [recipient],
+        "subject": "Your API key recovery verification code",
+        "text": f"Your one-time recovery code is {code}. It expires in 10 minutes. If you did not request this, ignore this email.",
+        "html": f"<p>Your one-time recovery code is <strong>{html.escape(code)}</strong>.</p><p>It expires in 10 minutes. If you did not request this, ignore this email.</p>",
+    }
+    request = Request(
+        "https://api.resend.com/emails",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json",
+            "User-Agent": "invoice-intelligence-api/0.3",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            if response.status < 200 or response.status >= 300:
+                raise RuntimeError(f"Email provider returned HTTP {response.status}.")
+    except HTTPError as exc:
+        raise RuntimeError(f"Email provider rejected the recovery message (HTTP {exc.code}).") from exc
+    except URLError as exc:
+        raise RuntimeError("Email provider could not be reached.") from exc
