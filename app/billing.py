@@ -75,8 +75,10 @@ def handle_webhook(payload: bytes, signature: str | None) -> dict[str, str]:
         raise ValueError("Missing Stripe-Signature header.")
     try:
         event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
-    except stripe.error.SignatureVerificationError as exc:
-        raise ValueError("Invalid Stripe webhook signature.") from exc
+    except Exception as exc:
+        if exc.__class__.__name__ == "SignatureVerificationError":
+            raise ValueError("Invalid Stripe webhook signature.") from exc
+        raise
     event_type = event["type"]
     obj = event["data"]["object"]
 
