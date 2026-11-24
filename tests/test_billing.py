@@ -406,5 +406,5 @@ def test_recovery_email_failure_can_retry_same_key_without_second_rotation(tmp_p
 
     billing.confirm_api_key_recovery("buyer@example.com", code)
     assert delivered == [pending_key, pending_key]
-    with pytest.raises(ValueError, match="invalid, expired, or already used"):
+    with pytest.raises(ValueError, match="invalid, expired, or the account is not eligible"):
         billing.confirm_api_key_recovery("buyer@example.com", "not-the-code")
