@@ -20,6 +20,18 @@ class UsageLimitExceeded(Exception):
         self.rate_limited = rate_limited
 
 
+def database_health_check() -> bool:
+    """Confirm SQLite is reachable and can acquire a write reservation."""
+    try:
+        with _connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("SELECT 1").fetchone()
+            conn.rollback()
+        return True
+    except sqlite3.Error:
+        return False
+
+
 def _db_path() -> str:
     return os.getenv("DATABASE_PATH", "data/invoice_api.db")
 
