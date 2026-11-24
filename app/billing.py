@@ -333,6 +333,7 @@ def _suspend_charge_customer(charge_or_dispute: Any, reason: str) -> int:
 
 
 def handle_webhook(payload: bytes, signature: str | None) -> dict[str, str]:
+    _configure()
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
     if not webhook_secret:
         raise RuntimeError("Stripe webhook signing secret is not configured.")
