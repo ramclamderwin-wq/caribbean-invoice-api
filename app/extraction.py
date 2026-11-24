@@ -14,7 +14,7 @@ _CURRENCY_SYMBOLS = {"BZ$": "BZD", "$": None, "€": "EUR", "£": "GBP"}
 # Numeric tokens are intentionally strict: malformed OCR such as 1O5.00
 # must fail as a whole rather than silently becoming 1.00.
 _AMOUNT_TOKEN = re.compile(
-    r"(?<![A-Za-z0-9])(?:BZ\$\s*|USD\s*|BZD\s*|EUR\s*|GBP\s*|"
+    r"(?<![A-Za-z0-9.,])(?:BZ\$\s*|USD\s*|BZD\s*|EUR\s*|GBP\s*|"
     r"CAD\s*|AUD\s*|[$€£]\s*)?"
     r"\(?-?(?:\d{1,3}(?:[,. ]\d{3})+|\d+)(?:[,.]\d{1,2})?\)?"
     r"(?![A-Za-z0-9%.,])",
