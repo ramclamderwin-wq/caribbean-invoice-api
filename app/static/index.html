@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>InvoSentry API — Developer Dashboard</title>
+<title>Trelliqo API — Developer Dashboard</title>
 <style>
 :root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#182230;background:#f5f7fa}
 body{margin:0}.wrap{max-width:860px;margin:48px auto;padding:0 20px}.card{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:24px;margin:18px 0;box-shadow:0 5px 20px #14213d0a}
@@ -12,12 +12,12 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0f172a;color:#e2e8f0
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.metric{background:#f8fafc;border-radius:10px;padding:14px}.metric strong{display:block;font-size:24px}
 </style></head>
 <body><main class="wrap">
-<h1>InvoSentry API</h1><p class="muted">Developer dashboard · InvoSentry helps businesses extract and validate invoice data.</p>
+<h1>Trelliqo API</h1><p class="muted">Developer dashboard · Trelliqo helps businesses extract and validate invoice data.</p>
 <section class="card" id="signup"><h2>Choose a subscription</h2><p class="muted">Monthly plans. Payments are handled securely by Stripe.</p><div class="field"><input id="email" type="email" placeholder="Your email address"></div><div class="grid" style="margin-top:14px"><div class="metric"><strong>Starter · $19/mo</strong><span class="muted">1,000 requests</span><p><button data-plan="starter">Choose Starter</button></p></div><div class="metric"><strong>Professional · $49/mo</strong><span class="muted">5,000 requests</span><p><button data-plan="professional">Choose Professional</button></p></div><div class="metric"><strong>Business · $149/mo</strong><span class="muted">20,000 requests</span><p><button data-plan="business">Choose Business</button></p></div></div><div id="signup-status" class="muted"></div></section><section class="card" id="claim" hidden><h2>Your API key</h2><p>Copy and securely save this key now. It is displayed only once.</p><pre id="new-key"></pre><button id="copy-key">Copy API key</button></section><section class="card"><h2>Connect your API key</h2><p class="muted">Paste the API key supplied by your account administrator. It is kept only in this page's memory and is not saved to your browser.</p>
 <div class="field"><input id="key" type="password" autocomplete="off" placeholder="iia_live_…"><button id="load">Connect</button></div><div class="field"><button id="billing-portal">Manage subscription</button></div><div id="status" class="muted" role="status"></div></section>
 <section class="card"><h2>Monthly usage</h2><div class="grid"><div class="metric"><span class="muted">Requests used</span><strong id="used">—</strong></div><div class="metric"><span class="muted">Monthly limit</span><strong id="limit">—</strong></div><div class="metric"><span class="muted">Remaining</span><strong id="remaining">—</strong></div></div></section>
 <section class="card"><h2>Try invoice extraction</h2><p class="muted">Paste invoice text to test extraction. Results should always be checked against the original invoice.</p><textarea id="invoice" rows="7" style="width:100%;box-sizing:border-box" placeholder="Supplier name&#10;Invoice No: INV-1001&#10;Date: 2026-11-20&#10;Currency: USD&#10;Subtotal: 100.00&#10;Tax: 8.25&#10;Grand Total: 108.25"></textarea><div class="field"><button id="extract">Extract invoice</button></div><pre id="result">Results will appear here.</pre></section>
-<p class="muted">InvoSentry is early-access software. Extraction is automated and may be inaccurate. Verify every result against the source document.</p>
+<p class="muted">Trelliqo is early-access software. Extraction is automated and may be inaccurate. Verify every result against the source document.</p>
 </main>
 <script>
 let apiKey="";
