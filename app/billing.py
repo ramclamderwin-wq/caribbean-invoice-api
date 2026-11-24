@@ -6,6 +6,7 @@ import secrets
 from typing import Any
 
 import stripe
+from cryptography.fernet import Fernet
 from app.security import (
     apply_stripe_subscription_event, checkout_key_delivery, mark_checkout_email_sent,
     provision_checkout_key, record_stripe_event, get_key_record_by_customer_id,
@@ -41,6 +42,10 @@ def create_checkout_session(plan: str, email: str) -> str:
     _configure()
     if not all(os.getenv(name) for name in ("API_KEY_ENCRYPTION_KEY", "RESEND_API_KEY", "FROM_EMAIL")):
         raise RuntimeError("Secure API-key encryption and email delivery must be configured before accepting paid signups.")
+    try:
+        Fernet(os.environ["API_KEY_ENCRYPTION_KEY"].encode("ascii"))
+    except (ValueError, TypeError, KeyError) as exc:
+        raise RuntimeError("API_KEY_ENCRYPTION_KEY must be a valid Fernet key before accepting paid signups.") from exc
     price_id = os.getenv(PLAN_PRICE_ENV[plan])
     if not price_id:
         raise RuntimeError(f"The Stripe price for {plan} is not configured.")
