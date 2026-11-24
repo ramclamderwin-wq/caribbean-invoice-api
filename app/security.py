@@ -332,6 +332,32 @@ def get_key_record_by_customer_id(customer_id: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def delete_customer_local_data(key_id: int) -> int:
+    """Delete local application records for a customer, preserving Stripe's own records."""
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        owner = conn.execute(
+            "SELECT stripe_customer_id,label FROM api_keys WHERE id=?",
+            (key_id,),
+        ).fetchone()
+        if not owner:
+            return 0
+        customer_id = owner["stripe_customer_id"]
+        if customer_id:
+            rows = conn.execute("SELECT id FROM api_keys WHERE stripe_customer_id=?", (customer_id,)).fetchall()
+            key_ids = [int(row["id"]) for row in rows]
+            conn.execute("DELETE FROM api_key_recovery_codes WHERE customer_id=?", (customer_id,))
+        else:
+            key_ids = [key_id]
+        if not key_ids:
+            return 0
+        placeholders = ",".join("?" for _ in key_ids)
+        conn.execute(f"DELETE FROM api_usage WHERE api_key_id IN ({placeholders})", key_ids)
+        conn.execute(f"DELETE FROM checkout_claims WHERE api_key_id IN ({placeholders})", key_ids)
+        cursor = conn.execute(f"DELETE FROM api_keys WHERE id IN ({placeholders})", key_ids)
+        return int(cursor.rowcount)
+
+
 def suspend_customer_access(customer_id: str, reason: str) -> int:
     """Disable every API key tied to a Stripe customer pending billing review."""
     with _connect() as conn:
