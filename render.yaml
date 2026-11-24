@@ -4,7 +4,7 @@ services:
     runtime: docker
     plan: starter
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeploy: false
     disk:
       name: quillvora-data
       mountPath: /var/data
