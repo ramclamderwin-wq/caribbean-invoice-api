@@ -161,6 +161,7 @@ def test_claim_endpoint_uses_post_and_no_store_headers(tmp_path, monkeypatch):
 
 def test_api_key_rotation_endpoint_returns_new_key(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "key-rotation-endpoint.db"))
+    init_db()
     raw_key, _ = create_api_key("rotation endpoint", 10)
     with TestClient(app) as client:
         response = client.post(
