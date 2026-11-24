@@ -168,18 +168,24 @@ def confirm_api_key_recovery(email: str, code: str) -> None:
 
 
 def _subscription_plan(subscription: Any) -> str | None:
-    """Resolve the current plan from its active Stripe price, not stale metadata."""
+    """Resolve one unambiguous plan from all configured subscription item prices."""
     items = subscription.get("items") or {}
     data = items.get("data") or []
-    price_id = None
-    if data:
-        price = data[0].get("price") or {}
-        price_id = price.get("id")
-    if price_id:
-        for plan, env_name in PLAN_PRICE_ENV.items():
-            configured = os.getenv(env_name)
-            if configured and configured == price_id:
-                return plan
+    configured_prices = {
+        os.getenv(env_name): plan
+        for plan, env_name in PLAN_PRICE_ENV.items()
+        if os.getenv(env_name)
+    }
+    matched = {
+        configured_prices.get(str((item.get("price") or {}).get("id")))
+        for item in data
+        if str((item.get("price") or {}).get("id")) in configured_prices
+    }
+    matched.discard(None)
+    if len(matched) > 1:
+        raise ValueError("Stripe subscription contains multiple configured plan prices; refusing ambiguous entitlement.")
+    if len(matched) == 1:
+        return next(iter(matched))
     metadata = subscription.get("metadata") or {}
     plan = metadata.get("plan")
     return plan if plan in PLAN_PRICE_ENV else None
