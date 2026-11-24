@@ -64,6 +64,10 @@ def init_db() -> None:
             event_type TEXT NOT NULL, received_at TEXT NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS stripe_subscription_state (
             subscription_id TEXT PRIMARY KEY, last_event_created INTEGER NOT NULL)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS public_rate_limit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, subject_hash TEXT NOT NULL,
+            action TEXT NOT NULL, created_at REAL NOT NULL)""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_public_rate_limits ON public_rate_limit_events(subject_hash,action,created_at)")
 
 
 def hash_key(api_key: str) -> str:
@@ -145,6 +149,27 @@ def record_usage(key_id: int) -> None:
     with _connect() as conn:
         conn.execute("INSERT INTO api_usage(api_key_id,used_at) VALUES (?,?)",
                      (key_id, datetime.now(timezone.utc).isoformat()))
+
+
+def reserve_public_rate_limit(subject: str, action: str, limit: int, window_seconds: int) -> None:
+    """Coarse IP-based throttle for unauthenticated billing endpoints."""
+    import time
+    subject_hash = hashlib.sha256(subject.encode("utf-8")).hexdigest()
+    now = time.time()
+    cutoff = now - window_seconds
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("DELETE FROM public_rate_limit_events WHERE created_at<?", (now - 86400,))
+        count = conn.execute(
+            "SELECT COUNT(*) AS n FROM public_rate_limit_events WHERE subject_hash=? AND action=? AND created_at>=?",
+            (subject_hash, action, cutoff),
+        ).fetchone()["n"]
+        if int(count) >= limit:
+            raise UsageLimitExceeded("Too many requests. Please wait and try again.", rate_limited=True)
+        conn.execute(
+            "INSERT INTO public_rate_limit_events(subject_hash,action,created_at) VALUES (?,?,?)",
+            (subject_hash, action, now),
+        )
 
 
 def requests_in_last_minute(key_id: int) -> int:
