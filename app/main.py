@@ -148,12 +148,12 @@ class ClaimRequest(BaseModel):
 
 
 class RecoveryRequest(BaseModel):
-    email: str = Field(min_length=5, max_length=254, pattern=r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+    email: str = Field(min_length=5, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 class RecoveryConfirmRequest(BaseModel):
-    email: str = Field(min_length=5, max_length=254, pattern=r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
-    code: str = Field(pattern=r"^\\d{6}$")
+    email: str = Field(min_length=5, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+    code: str = Field(pattern=r"^\d{6}$")
 
 
 def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
