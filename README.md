@@ -101,3 +101,38 @@ A test suite is included in `tests/test_extraction.py`.
 6. Add an optional AI extraction provider behind a configurable interface, with strict privacy controls and validation.
 
 Do not put API secrets or customer invoices in source control. Do not use extracted data to automatically pay or approve invoices.
+
+
+## API authentication and customer usage
+
+Invoice extraction endpoints require a customer API key in the HTTP Authorization header:
+
+```http
+Authorization: Bearer iia_live_your_key
+```
+
+- `POST /v1/extract-text` and `POST /v1/extract-file` require a valid key.
+- `GET /v1/usage` returns the current UTC calendar month's request count and remaining quota.
+- `POST /v1/admin/api-keys` creates a customer key. Protect this endpoint with the server-side `API_ADMIN_KEY` environment variable and the `X-Admin-Key` header.
+- Customer API keys are stored as SHA-256 hashes; the raw key is shown only once when created.
+- `DEFAULT_MONTHLY_LIMIT` sets the default monthly request allowance (default 1,000).
+- `DATABASE_PATH` sets the SQLite database file location. Production deployments must use persistent storage and backups.
+
+Example: create a customer key (run only from a trusted administrator environment):
+
+```bash
+curl -X POST https://YOUR_API_HOST/v1/admin/api-keys \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: $API_ADMIN_KEY" \
+  -d '{"label":"Acme Books","monthly_limit":1000}'
+```
+
+Open `/dashboard` on the deployed service to use the lightweight developer dashboard. It does not save API keys in browser storage.
+
+## Render deployment notes
+
+The included Blueprint config uses a paid always-on service and a persistent disk because customer keys and usage records must survive restarts. Before creating the Blueprint, review Render's current service and disk charges. Set the secret `API_ADMIN_KEY` and a comma-separated `CORS_ORIGINS` value in Render's environment settings. Never commit secrets to GitHub.
+
+## Billing status
+
+Stripe is not connected yet. Before enabling paid subscriptions, create the Stripe account for the LLC, configure approved products/prices, and provide the secret key and webhook signing secret through Render's secret environment settings. Do not put Stripe secrets in this repository. Subscription checkout and customer self-service billing still need to be implemented and tested before accepting payments.
