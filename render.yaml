@@ -15,7 +15,7 @@ services:
       - key: API_ADMIN_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: "*"
+        value: ""
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
