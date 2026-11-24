@@ -76,6 +76,7 @@ def init_db() -> None:
             encrypted_api_key TEXT,
             browser_claimed_at TEXT,
             email_sent_at TEXT,
+            email_delivery_claimed_at TEXT,
             delivery_email TEXT,
             FOREIGN KEY(api_key_id) REFERENCES api_keys(id))""")
         checkout_columns = {row["name"] for row in conn.execute("PRAGMA table_info(checkout_claims)").fetchall()}
@@ -83,6 +84,7 @@ def init_db() -> None:
             "encrypted_api_key": "TEXT",
             "browser_claimed_at": "TEXT",
             "email_sent_at": "TEXT",
+            "email_delivery_claimed_at": "TEXT",
             "delivery_email": "TEXT",
         }.items():
             if name not in checkout_columns:
@@ -213,10 +215,44 @@ def checkout_key_delivery(session_id: str) -> dict[str, Any] | None:
     }
 
 
+def claim_checkout_email_delivery(session_id: str, lease_seconds: int = 300) -> bool:
+    """Atomically claim one email send; stale claims can be retried after a crash."""
+    now = datetime.now(timezone.utc)
+    now_text = now.isoformat()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT email_sent_at,email_delivery_claimed_at FROM checkout_claims WHERE checkout_session_id=?",
+            (session_id,),
+        ).fetchone()
+        if not row or row["email_sent_at"]:
+            return False
+        claimed = row["email_delivery_claimed_at"]
+        if claimed:
+            try:
+                if now - datetime.fromisoformat(claimed) < timedelta(seconds=lease_seconds):
+                    return False
+            except ValueError:
+                pass
+        conn.execute(
+            "UPDATE checkout_claims SET email_delivery_claimed_at=? WHERE checkout_session_id=?",
+            (now_text, session_id),
+        )
+        return True
+
+
+def release_checkout_email_delivery(session_id: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE checkout_claims SET email_delivery_claimed_at=NULL WHERE checkout_session_id=? AND email_sent_at IS NULL",
+            (session_id,),
+        )
+
+
 def mark_checkout_email_sent(session_id: str) -> None:
     with _connect() as conn:
         conn.execute(
-            "UPDATE checkout_claims SET email_sent_at=? WHERE checkout_session_id=?",
+            "UPDATE checkout_claims SET email_sent_at=?,email_delivery_claimed_at=NULL WHERE checkout_session_id=?",
             (datetime.now(timezone.utc).isoformat(), session_id),
         )
 
