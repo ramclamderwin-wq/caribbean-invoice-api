@@ -5,6 +5,7 @@ import hmac
 import os
 import secrets
 import sqlite3
+import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
@@ -56,7 +57,15 @@ def init_db() -> None:
             past_due_since TEXT, current_period_start TEXT, current_period_end TEXT)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS api_usage (
             id INTEGER PRIMARY KEY AUTOINCREMENT, api_key_id INTEGER NOT NULL,
-            used_at TEXT NOT NULL, FOREIGN KEY(api_key_id) REFERENCES api_keys(id))""")
+            used_at TEXT NOT NULL, reservation_id TEXT,
+            FOREIGN KEY(api_key_id) REFERENCES api_keys(id))""")
+        usage_columns = {row["name"] for row in conn.execute("PRAGMA table_info(api_usage)").fetchall()}
+        if "reservation_id" not in usage_columns:
+            conn.execute("ALTER TABLE api_usage ADD COLUMN reservation_id TEXT")
+        conn.execute("""CREATE TABLE IF NOT EXISTS api_request_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, api_key_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL, FOREIGN KEY(api_key_id) REFERENCES api_keys(id))""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_api_requests_key_time ON api_request_events(api_key_id,created_at)")
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(api_keys)").fetchall()}
         for name, definition in {
             "plan": "TEXT NOT NULL DEFAULT 'free'",
@@ -290,25 +299,64 @@ def key_usage(key_id: int, monthly_limit: int) -> dict[str, int]:
     return {"used": used, "monthly_limit": monthly_limit, "remaining": max(0, monthly_limit-used)}
 
 
-def reserve_usage(key_id: int, monthly_limit: int, requests_per_minute: int) -> None:
-    """Atomically meter an attempt before expensive work, preventing quota races."""
+def reserve_request_event(key_id: int, requests_per_minute: int) -> None:
+    """Count every authenticated API attempt independently of billable page units."""
     now = datetime.now(timezone.utc)
-    now_text = now.isoformat()
     cutoff = (now - timedelta(seconds=60)).isoformat()
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        start, end = _usage_window(conn, key_id, now)
-        used = conn.execute(
-            "SELECT COUNT(*) AS n FROM api_usage WHERE api_key_id=? AND used_at>=? AND used_at<?",
-            (key_id, start, end)).fetchone()["n"]
-        if int(used) >= monthly_limit:
-            raise UsageLimitExceeded("Monthly API usage limit reached.")
         recent = conn.execute(
-            "SELECT COUNT(*) AS n FROM api_usage WHERE api_key_id=? AND used_at>=?",
-            (key_id, cutoff)).fetchone()["n"]
+            "SELECT COUNT(*) AS n FROM api_request_events WHERE api_key_id=? AND created_at>=?",
+            (key_id, cutoff),
+        ).fetchone()["n"]
         if int(recent) >= requests_per_minute:
             raise UsageLimitExceeded("Per-minute API rate limit reached. Please retry shortly.", rate_limited=True)
-        conn.execute("INSERT INTO api_usage(api_key_id,used_at) VALUES (?,?)", (key_id, now_text))
+        conn.execute(
+            "INSERT INTO api_request_events(api_key_id,created_at) VALUES (?,?)",
+            (key_id, now.isoformat()),
+        )
+
+
+def reserve_usage(
+    key_id: int,
+    monthly_limit: int,
+    requests_per_minute: int,
+    units: int = 1,
+    *,
+    count_request: bool = True,
+) -> str:
+    """Reserve billable page units atomically; returns a token that can be released on failure."""
+    if units < 1:
+        raise ValueError("Usage units must be at least one.")
+    if count_request:
+        reserve_request_event(key_id, requests_per_minute)
+    now = datetime.now(timezone.utc)
+    now_text = now.isoformat()
+    reservation_id = uuid.uuid4().hex
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        start, end = _usage_window(conn, key_id, now)
+        used = int(conn.execute(
+            "SELECT COUNT(*) AS n FROM api_usage WHERE api_key_id=? AND used_at>=? AND used_at<?",
+            (key_id, start, end),
+        ).fetchone()["n"])
+        if used + units > monthly_limit:
+            raise UsageLimitExceeded("Monthly page usage limit reached.")
+        conn.executemany(
+            "INSERT INTO api_usage(api_key_id,used_at,reservation_id) VALUES (?,?,?)",
+            [(key_id, now_text, reservation_id) for _ in range(units)],
+        )
+    return reservation_id
+
+
+def release_usage_reservation(key_id: int, reservation_id: str) -> int:
+    """Release page quota after a failed upload while retaining its request-rate event."""
+    with _connect() as conn:
+        cursor = conn.execute(
+            "DELETE FROM api_usage WHERE api_key_id=? AND reservation_id=?",
+            (key_id, reservation_id),
+        )
+        return int(cursor.rowcount)
 
 
 def record_usage(key_id: int) -> None:
@@ -343,7 +391,7 @@ def reserve_public_rate_limit(subject: str, action: str, limit: int, window_seco
 def requests_in_last_minute(key_id: int) -> int:
     cutoff = (datetime.now(timezone.utc)-timedelta(seconds=60)).isoformat()
     with _connect() as conn:
-        row = conn.execute("SELECT COUNT(*) AS used FROM api_usage WHERE api_key_id=? AND used_at>=?",
+        row = conn.execute("SELECT COUNT(*) AS used FROM api_request_events WHERE api_key_id=? AND created_at>=?",
                            (key_id, cutoff)).fetchone()
     return int(row["used"])
 
