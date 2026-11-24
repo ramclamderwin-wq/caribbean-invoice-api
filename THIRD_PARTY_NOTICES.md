@@ -4,7 +4,7 @@
 
 The application uses pypdfium2 for PDF text extraction and rasterization instead of PyMuPDF.
 
-The pypdfium2 project states that its code is available under Apache-2.0 or BSD-3-Clause, and PDFium is available under a BSD-style license. PDFium bundles dependencies with additional licenses; pypdfium2's distribution includes the corresponding license materials. The exact wheel/build and all bundled notices must be retained and reviewed before redistributing the container image.
+The pypdfium2 project states that its code is available under Apache-2.0 or BSD-3-Clause, and PDFium is available under a BSD-style license. PDFium bundles dependencies with additional licenses; pypdfium2's distribution includes the corresponding license materials. The Docker build copies the exact installed wheel's `.dist-info/licenses/` contents, including `BUILD_LICENSES/`, into `/app/THIRD_PARTY_LICENSES/pypdfium2/`. The build fails if the wheel does not expose PDFium BUILD_LICENSES. Verify this directory in the built image and retain it with every redistributed image.
 
 References:
 - https://pypdfium2-team.github.io/pypdfium2/readme.html
