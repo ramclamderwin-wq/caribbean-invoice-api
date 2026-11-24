@@ -200,3 +200,11 @@ def test_amount_attached_currency_beats_incidental_currency_note():
         "Prices in USD\nSubtotal: BZ$ 100.00\nTax: BZ$ 8.00\nTotal: BZ$ 108.00"
     )
     assert result["fields"]["currency"] == "BZD"
+
+
+def test_spanish_issue_date_and_abbreviated_month_are_supported():
+    result = extract_invoice_fields(
+        "Comercial del Caribe\nFactura No: FC-101\nFecha de emisión: 20 nov. 2026\n"
+        "Moneda: BZD\nSubtotal: 100.00\nIVA: 12.50\nTotal a pagar: 112.50"
+    )
+    assert result["fields"]["invoice_date"] == "2026-11-20"
