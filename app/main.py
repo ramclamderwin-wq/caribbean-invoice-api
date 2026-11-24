@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.security import (
     UsageLimitExceeded, create_api_key, get_key_record, init_db, key_usage,
-    reserve_usage, rotate_api_key, revoke_api_key,
+    reserve_usage, reserve_public_rate_limit, rotate_api_key, revoke_api_key,
 )
 from app.billing import create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook
 from app.extraction import extract_invoice_fields
@@ -107,10 +107,20 @@ def require_billing_key(authorization: str | None = Header(default=None)) -> dic
     return record
 
 
-@app.post("/v1/billing/checkout")
-def billing_checkout(request: CheckoutRequest) -> dict[str, str]:
+def _throttle_public_request(request: Request, action: str, default_limit: int, window_seconds: int) -> None:
+    subject = request.client.host if request.client else "unknown"
     try:
-        url = create_checkout_session(request.plan, request.email)
+        limit = int(os.getenv(f"{action.upper()}_RATE_LIMIT", str(default_limit)))
+        reserve_public_rate_limit(subject, action, limit, window_seconds)
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+
+
+@app.post("/v1/billing/checkout")
+def billing_checkout(body: CheckoutRequest, http_request: Request) -> dict[str, str]:
+    _throttle_public_request(http_request, "checkout", 5, 3600)
+    try:
+        url = create_checkout_session(body.plan, body.email)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -119,7 +129,8 @@ def billing_checkout(request: CheckoutRequest) -> dict[str, str]:
 
 
 @app.post("/v1/billing/claim")
-def billing_claim(request: ClaimRequest, response: Response) -> dict[str, str]:
+def billing_claim(request: ClaimRequest, response: Response, http_request: Request) -> dict[str, str]:
+    _throttle_public_request(http_request, "claim", 10, 60)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
