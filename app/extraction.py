@@ -78,6 +78,8 @@ def _normalise_amount(value: str | None) -> str | None:
 
 
 def _amounts_in_line(line: str) -> list[str]:
+    # Strip sentence punctuation without changing decimal separators.
+    line = line.rstrip(" \t.,;:")
     # Percentages are not amounts. A tax line may contain both a rate and
     # the monetary tax amount; preserve only currency/amount tokens.
     candidates: list[str] = []
@@ -93,7 +95,13 @@ def _amounts_in_line(line: str) -> list[str]:
 
 
 def _label_amount(text: str, labels: str, *, allow_next_line: bool = True) -> str | None:
-    label_re = re.compile(rf"^\s*(?:{labels})\s*(?:\([^\n)]*%\))?\s*[:#\-]?\s*(.*?)\s*$", re.I)
+    # Require an actual separator followed by a numeric/currency token.
+    # This prevents "Total Tax" and "Tax ID" from being mistaken for
+    # monetary labels just because they begin with "Total" or "Tax".
+    label_re = re.compile(
+        rf"^\s*(?:{labels})\b\s*(?:\([^\n)]*%\))?\s*(?:[:#\-]\s*|\s+)"
+        rf"(?=[(BZ$€£\d-])((?:.*?))\s*$", re.I
+    )
     lines = text.splitlines()
     for index, line in enumerate(lines):
         match = label_re.match(line)
@@ -102,12 +110,13 @@ def _label_amount(text: str, labels: str, *, allow_next_line: bool = True) -> st
         value_part = match.group(1)
         amounts = _amounts_in_line(value_part)
         if amounts:
-            # Prefer the last monetary token, e.g. "GST (12.5%): BZ$ 50.00".
-            return _normalise_amount(amounts[-1])
+            # The first token belongs to the labelled field. Later tokens
+            # may be "Paid", "Balance", or another amount on the same line.
+            return _normalise_amount(amounts[0])
         if allow_next_line and index + 1 < len(lines):
             amounts = _amounts_in_line(lines[index + 1])
             if amounts:
-                return _normalise_amount(amounts[-1])
+                return _normalise_amount(amounts[0])
     return None
 
 
@@ -212,18 +221,30 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
     )
 
     currency = None
-    currency_match = re.search(r"\b(" + "|".join(sorted(_CURRENCY_CODES)) + r")\b", text, re.I)
-    if currency_match:
-        currency = currency_match.group(1).upper()
-    elif "BZ$" in text.upper():
+    # Prefer an explicit code/symbol attached to a monetary amount over
+    # incidental prose such as "Prices in USD" on a BZ$ invoice.
+    amount_lines = [line for line in lines if _amounts_in_line(line)]
+    amount_context = "\n".join(amount_lines)
+    if re.search(r"\bBZ\$", amount_context, re.I):
         currency = "BZD"
-    elif "€" in text:
-        currency = "EUR"
-    elif "£" in text:
-        currency = "GBP"
-    elif "$" in text:
-        # A bare dollar sign does not identify which dollar currency.
-        currency = None
+    else:
+        attached = re.search(
+            r"(?<![A-Za-z])(" + "|".join(sorted(_CURRENCY_CODES)) + r")\s*(?=[(+-]?\d)",
+            amount_context, re.I
+        )
+        if attached:
+            currency = attached.group(1).upper()
+        elif "€" in amount_context:
+            currency = "EUR"
+        elif "£" in amount_context:
+            currency = "GBP"
+        else:
+            currency_match = re.search(r"\b(" + "|".join(sorted(_CURRENCY_CODES)) + r")\b", text, re.I)
+            if currency_match:
+                currency = currency_match.group(1).upper()
+            elif "$" in amount_context:
+                # A bare dollar sign does not identify which dollar currency.
+                currency = None
 
     fields = {
         "supplier_name": supplier,
