@@ -31,7 +31,7 @@ const checkoutSession=new URLSearchParams(location.search).get("session_id");
 if(checkoutSession){el("claim").hidden=false;fetch("/v1/billing/claim?session_id="+encodeURIComponent(checkoutSession)).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.detail||"Could not claim API key.");el("new-key").textContent=d.api_key;apiKey=d.api_key;el("key").value=d.api_key;el("status").textContent="Account activated. Save your API key securely.";}).catch(e=>{el("new-key").textContent=e.message})}
 el("copy-key").onclick=async()=>{try{await navigator.clipboard.writeText(el("new-key").textContent);el("copy-key").textContent="Copied"}catch(e){el("copy-key").textContent="Select and copy the key above"}};
 
-const el=id=>document.getElementById(id);
+
 async function request(path,options={}){const response=await fetch(path,{...options,headers:{...(options.headers||{}),Authorization:"Bearer "+apiKey}});const data=await response.json().catch(()=>({detail:"Unexpected server response"}));if(!response.ok)throw new Error(data.detail||"Request failed");return data}
 el("billing-portal").onclick=async()=>{try{const p=await request("/v1/billing/portal",{method:"POST"});location.href=p.portal_url}catch(e){el("status").textContent=e.message}};
 el("load").onclick=async()=>{apiKey=el("key").value.trim();if(!apiKey){el("status").textContent="Enter an API key.";return}try{const u=await request("/v1/usage");el("used").textContent=u.used;el("limit").textContent=u.monthly_limit;el("remaining").textContent=u.remaining;el("status").textContent="Connected successfully."}catch(e){apiKey="";el("status").textContent=e.message}};
