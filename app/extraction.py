@@ -135,6 +135,7 @@ def _normalise_date(raw: str | None) -> str | None:
         except ValueError:
             pass
     spanish = re.fullmatch(r"(\d{1,2})\s+de\s+([A-Za-záéíóúñ]+)\s+de\s+(\d{4})", value, re.I)
+    spanish_short = re.fullmatch(r"(\d{1,2})\s+(?:de\s+)?([A-Za-záéíóúñ]{3,4})\.?\s+(?:de\s+)?(\d{4})", value, re.I)
     if spanish:
         day, month_name, year = spanish.groups()
         spanish_months = {
@@ -142,6 +143,25 @@ def _normalise_date(raw: str | None) -> str | None:
             "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
             "septiembre": 9, "setiembre": 9, "octubre": 10,
             "noviembre": 11, "diciembre": 12,
+            "ene": 1, "enero": 1, "feb": 2, "febrero": 2,
+            "mar": 3, "marzo": 3, "abr": 4, "abril": 4,
+            "may": 5, "mayo": 5, "jun": 6, "junio": 6,
+            "jul": 7, "julio": 7, "ago": 8, "agosto": 8,
+            "sep": 9, "sept": 9, "set": 9, "oct": 10,
+            "nov": 11, "dic": 12,
+        }
+        month = spanish_months.get(month_name.lower())
+        if month:
+            try:
+                return date(int(year), month, int(day)).isoformat()
+            except ValueError:
+                return None
+    if spanish_short:
+        day, month_name, year = spanish_short.groups()
+        spanish_months = {
+            "ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
+            "jul": 7, "ago": 8, "sep": 9, "sept": 9, "set": 9,
+            "oct": 10, "nov": 11, "dic": 12,
         }
         month = spanish_months.get(month_name.lower())
         if month:
@@ -173,7 +193,7 @@ def _invoice_date(text: str) -> tuple[str | None, bool]:
     lines = text.splitlines()
     # Explicit invoice-date labels take precedence. Due dates are never used.
     for line in lines:
-        if re.match(r"^\s*(?:invoice\s+date|date\s+of\s+invoice|fecha\s+de\s+factura)\b", line, re.I):
+        if re.match(r"^\s*(?:invoice\s+date|date\s+of\s+invoice|fecha\s+de\s+factura|fecha\s+de\s+emisi[oó]n)\b", line, re.I):
             match = _DATE_TOKEN.search(line)
             if match:
                 return _normalise_date(match.group(1)), True
