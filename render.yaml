@@ -16,6 +16,12 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         value: ""
+      - key: API_KEY_ENCRYPTION_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
