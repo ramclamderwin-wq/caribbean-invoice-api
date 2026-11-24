@@ -405,7 +405,7 @@ def test_recovery_email_failure_can_retry_same_key_without_second_rotation(tmp_p
 
     billing.confirm_api_key_recovery("buyer@example.com", code)
     assert delivered == [pending_key, pending_key]
-    with pytest.raises(ValueError, match="invalid, expired, or the account is not eligible"):
+    with pytest.raises(ValueError, match="invalid, expired, or already used"):
         billing.confirm_api_key_recovery("buyer@example.com", "not-the-code")
 
 
@@ -512,3 +512,15 @@ def test_paused_subscription_collection_disables_api_key(tmp_path, monkeypatch):
     updated = get_key_record(key)
     assert updated["active"] == 0
     assert updated["subscription_status"] == "paused"
+
+
+def test_revoked_api_key_cannot_use_billing_key_endpoints(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "revoked-billing-key.db"))
+    init_db()
+    key, _ = create_api_key("revoked portal customer", 100)
+    headers = {"Authorization": f"Bearer {key}"}
+    with TestClient(app) as client:
+        first = client.post("/v1/keys/revoke", headers=headers)
+        second = client.post("/v1/keys/revoke", headers=headers)
+    assert first.status_code == 200
+    assert second.status_code == 401
