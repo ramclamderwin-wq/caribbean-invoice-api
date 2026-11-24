@@ -26,5 +26,26 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build production Docker image
         run: docker build -t invoice-api-ci .
+      - name: Smoke-test the production Docker image
+        run: |
+          docker run -d --name invoice-api-smoke -p 8000:8000 --tmpfs /var/data:uid=10001,gid=10001 invoice-api-ci
+          python - <<'PY'
+          import time
+          import urllib.error
+          import urllib.request
+
+          for attempt in range(30):
+              try:
+                  with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=2) as response:
+                      if response.status == 200:
+                          print(response.read().decode())
+                          break
+              except (urllib.error.URLError, TimeoutError):
+                  time.sleep(1)
+          else:
+              raise SystemExit("Container health smoke test failed")
+          PY
+          docker logs invoice-api-smoke
+          docker rm -f invoice-api-smoke
       - name: Run tests
         run: PYTHONPATH=. pytest -q
