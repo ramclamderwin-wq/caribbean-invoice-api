@@ -41,6 +41,18 @@ def _monthly_limit(plan: str) -> int:
     return int(os.getenv(PLAN_LIMIT_ENV[plan], str(DEFAULT_LIMITS[plan])))
 
 
+def _within_payment_grace(record: dict[str, Any]) -> bool:
+    started = record.get("past_due_since")
+    if not started:
+        return False
+    try:
+        past_due_at = datetime.fromisoformat(started)
+    except (TypeError, ValueError):
+        return False
+    grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
+    return datetime.now(timezone.utc) - past_due_at <= timedelta(hours=grace_hours)
+
+
 def _stripe_period_value(subscription: Any, field: str) -> str | None:
     value = subscription.get(field)
     if value is None:
@@ -160,11 +172,8 @@ def request_api_key_recovery(email: str) -> None:
         status = str(subscription.get("status", "canceled"))
         if status not in {"active", "trialing", "past_due"}:
             continue
-        if status == "past_due" and record.get("past_due_since"):
-            started = datetime.fromisoformat(record["past_due_since"])
-            grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
-            if datetime.now(timezone.utc) - started > timedelta(hours=grace_hours):
-                continue
+        if status == "past_due" and not _within_payment_grace(record):
+            continue
         code = f"{secrets.randbelow(1_000_000):06d}"
         create_recovery_code(email, customer_id, code)
         try:
@@ -192,11 +201,8 @@ def confirm_api_key_recovery(email: str, code: str) -> None:
         status = str(subscription.get("status", "canceled"))
         if status not in {"active", "trialing", "past_due"}:
             continue
-        if status == "past_due" and record.get("past_due_since"):
-            started = datetime.fromisoformat(record["past_due_since"])
-            grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
-            if datetime.now(timezone.utc) - started > timedelta(hours=grace_hours):
-                continue
+        if status == "past_due" and not _within_payment_grace(record):
+            continue
         new_key = prepare_recovery_key(email, code, customer_id, record["id"])
         if not new_key:
             continue
