@@ -88,3 +88,53 @@ def test_atomic_quota_reservation_never_exceeds_limit_under_concurrency(tmp_path
 
     assert sum(outcomes) == 5
     assert key_usage(record["id"], 5)["used"] == 5
+
+
+
+def test_stripe_webhook_events_are_deduplicated_and_older_events_ignored(tmp_path, monkeypatch):
+    from app.security import apply_stripe_subscription_event
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "stripe-events.db"))
+    init_db()
+    raw_key, _ = create_api_key("stripe customer", 1000)
+    record = get_key_record(raw_key)
+    from app.security import set_subscription
+    set_subscription(record["id"], "starter", "active", "cus_1", "sub_1", 1000)
+
+    first = apply_stripe_subscription_event(
+        "evt_new", 200, "customer.subscription.updated", "sub_1",
+        "active", "business", "cus_1", 20000,
+    )
+    stale = apply_stripe_subscription_event(
+        "evt_old", 100, "invoice.payment_failed", "sub_1",
+        "past_due", "starter", "cus_1", 1000,
+    )
+    duplicate = apply_stripe_subscription_event(
+        "evt_new", 200, "customer.subscription.updated", "sub_1",
+        "active", "business", "cus_1", 20000,
+    )
+
+    updated = get_key_record(raw_key)
+    assert first == "applied"
+    assert stale == "stale"
+    assert duplicate == "duplicate"
+    assert updated["plan"] == "business"
+    assert updated["monthly_limit"] == 20000
+    assert updated["active"] == 1
+
+
+def test_api_key_rotation_preserves_usage_and_invalidates_old_key(tmp_path, monkeypatch):
+    from app.security import reserve_usage, rotate_api_key
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "rotate.db"))
+    init_db()
+    raw_key, _ = create_api_key("rotation customer", 10)
+    old = get_key_record(raw_key)
+    reserve_usage(old["id"], 10, 60)
+
+    new_key = rotate_api_key(old["id"])
+    assert get_key_record(raw_key) is None
+    new = get_key_record(new_key)
+    assert new is not None
+    assert new["id"] == old["id"]
+    assert key_usage(new["id"], new["monthly_limit"])["used"] == 1
