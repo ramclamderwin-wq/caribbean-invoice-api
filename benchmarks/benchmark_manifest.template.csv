@@ -1,0 +1,2 @@
+file,supplier_name,invoice_number,invoice_date,currency,subtotal,tax,total
+documents/example-001.pdf,Example Supplier Ltd,INV-001,2026-01-15,USD,100.00,8.25,108.25
