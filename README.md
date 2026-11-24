@@ -122,7 +122,8 @@ Authorization: Bearer iia_live_your_key
 ```
 
 - `POST /v1/extract-text` and `POST /v1/extract-file` require a valid key.
-- `GET /v1/usage` returns the current UTC calendar month's request count and remaining quota.
+- `GET /v1/usage` returns usage for the active Stripe subscription billing period when Stripe period boundaries are present; legacy/non-subscription keys fall back to the UTC calendar month.
+- `DELETE /v1/account` cancels non-terminal Stripe subscriptions for the authenticated customer, then deletes that customer's local API keys, usage, checkout-delivery records, and recovery codes. Stripe may retain payment/invoice records as legally required.
 - `POST /v1/admin/api-keys` creates a customer key. Protect this endpoint with the server-side `API_ADMIN_KEY` environment variable and the `X-Admin-Key` header.
 - Customer API keys are authenticated by SHA-256 hashes. A separately Fernet-encrypted copy is retained for webhook email retries and browser claim; keep API_KEY_ENCRYPTION_KEY secret and backed up. Email-based recovery verifies a one-time code and rotates the key.
 - `DEFAULT_MONTHLY_LIMIT` sets the default monthly request allowance (default 1,000).
@@ -153,7 +154,7 @@ Stripe Checkout is designed for public customer signup. New customers do not nee
 - `POST /v1/billing/recovery/request` — sends a short-lived verification code to the email on an eligible Stripe customer account.
 - `POST /v1/billing/recovery/confirm` — verifies the one-time code, rotates the API key in place, and emails the replacement. If the email provider fails, retry with the same code to deliver the same encrypted pending key without rotating again.
 - `POST /v1/keys/rotate` and `POST /v1/keys/revoke` — rotate or revoke the currently authenticated key.
-- `POST /v1/billing/webhook` — verifies Stripe signatures, deduplicates events, ignores older subscription events, maps current Stripe Price IDs to plan quotas, applies a configurable payment-failure grace period, and emails newly provisioned keys on successful checkout.
+- `POST /v1/billing/webhook` — verifies Stripe signatures, deduplicates events, ignores older subscription events, maps current Stripe Price IDs to plan quotas, applies a configurable payment-failure grace period, suspends access on refunds/disputes and paused subscriptions, and emails newly provisioned keys on successful checkout.
 
 Checkout is disabled unless the API-key encryption key and email provider are configured. The API key hash is used for authentication; a separately encrypted copy is retained so webhook retries can safely deliver the same key. Keep the encryption key backed up and secret. The browser claim is still one-time, and the session ID remains a bearer token.
 
@@ -172,6 +173,6 @@ Required environment variables:
 - `RECOVERY_REQUEST_RATE_LIMIT` and `RECOVERY_CONFIRM_RATE_LIMIT` can override the default per-IP recovery throttles.
 - Optional quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
 
-Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion/pause/resume and invoice payment failed/paid events before testing subscription lifecycle. Configure Resend with a verified sender domain before enabling Checkout. Checkout key email delivery depends on the webhook and will retry on email-provider failure. Stripe Tax remains disabled until the company determines its registration and collection obligations.
+Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion/pause/resume, invoice payment failed/paid, `charge.refunded`, and `charge.dispute.created`/`updated`/`closed` events before testing subscription lifecycle. Refunds suspend access; partial refunds and disputes require manual review before access can be restored. Configure Resend with a verified sender domain before enabling Checkout. Checkout key email delivery depends on the webhook and will retry on email-provider failure. Stripe Tax remains disabled until the company determines its registration and collection obligations.
 
-Checkout remains disabled until the Resend sender, encryption key, Stripe secrets, and webhook endpoint are configured and tested. No Render deployment or live Stripe test has been performed.
+Checkout remains disabled until the Resend sender, encryption key, Stripe secrets, and webhook endpoint are configured and tested. No Render deployment or live Stripe test has been performed. Draft legal documents are in `TERMS_DRAFT.md` and `PRIVACY_DRAFT.md`; they are not approved for publication and contain placeholders.
