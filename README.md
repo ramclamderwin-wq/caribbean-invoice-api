@@ -133,6 +133,21 @@ Open `/dashboard` on the deployed service to use the lightweight developer dashb
 
 The included Blueprint config uses a paid always-on service and a persistent disk because customer keys and usage records must survive restarts. Before creating the Blueprint, review Render's current service and disk charges. Set the secret `API_ADMIN_KEY` and a comma-separated `CORS_ORIGINS` value in Render's environment settings. Never commit secrets to GitHub.
 
-## Billing status
+## Stripe subscription billing (integration in progress)
 
-Stripe is not connected yet. Before enabling paid subscriptions, create the Stripe account for the LLC, configure approved products/prices, and provide the secret key and webhook signing secret through Render's secret environment settings. Do not put Stripe secrets in this repository. Subscription checkout and customer self-service billing still need to be implemented and tested before accepting payments.
+Stripe Checkout and Customer Portal endpoints are implemented in the API. They require server-side configuration and a verified webhook before they can be used.
+
+- `POST /v1/billing/checkout` — authenticated with an existing API key; creates a hosted subscription Checkout session for Starter, Professional, or Business.
+- `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an API key already linked to a Stripe customer.
+- `POST /v1/billing/webhook` — verifies Stripe signatures and updates the linked API key's plan, monthly quota, and active status for subscription events.
+
+Required environment variables:
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PROFESSIONAL`, `STRIPE_PRICE_BUSINESS`
+- `CHECKOUT_SUCCESS_URL`, `CHECKOUT_CANCEL_URL`, `CUSTOMER_PORTAL_RETURN_URL`
+- Optional quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
+
+Create the three recurring prices in Stripe and place their Price IDs in the environment variables; do not put secret keys or webhook secrets in GitHub. Prices shown in the business plan are proposals until approved and created in Stripe. The company must finish test-mode checkout and webhook testing before any live subscription is offered.
+
+Important current limitation: API keys are still provisioned by the administrator using `POST /v1/admin/api-keys`. The customer self-signup/key-delivery flow is not yet implemented. The API must not be advertised as a fully automated self-service SaaS until that flow, subscription lifecycle tests, and deployment verification are complete.
