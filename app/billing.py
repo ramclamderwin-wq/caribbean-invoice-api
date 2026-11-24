@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from datetime import datetime, timezone, timedelta
 import secrets
 from typing import Any
@@ -25,6 +26,7 @@ PLAN_LIMIT_ENV = {
     "business": "PLAN_BUSINESS_MONTHLY_LIMIT",
 }
 DEFAULT_LIMITS = {"starter": 1000, "professional": 5000, "business": 20000}
+logger = logging.getLogger(__name__)
 
 
 def _configure() -> None:
@@ -109,7 +111,17 @@ def create_portal_session(key_record: dict[str, Any]) -> str:
 
 def request_api_key_recovery(email: str) -> None:
     _configure()
-    customers = stripe.Customer.list(email=email, limit=10)
+    if not all(os.getenv(name) for name in ("API_KEY_ENCRYPTION_KEY", "RESEND_API_KEY", "FROM_EMAIL")):
+        raise RuntimeError("Secure key encryption and email delivery are not configured.")
+    try:
+        Fernet(os.environ["API_KEY_ENCRYPTION_KEY"].encode("ascii"))
+    except (ValueError, TypeError, KeyError) as exc:
+        raise RuntimeError("API_KEY_ENCRYPTION_KEY is invalid.") from exc
+    try:
+        customers = stripe.Customer.list(email=email, limit=10)
+    except Exception:
+        logger.warning("Stripe customer lookup failed during account recovery.")
+        return
     for customer in customers.get("data", []):
         customer_id = str(customer.get("id") or "")
         record = get_key_record_by_customer_id(customer_id)
@@ -126,7 +138,10 @@ def request_api_key_recovery(email: str) -> None:
                 continue
         code = f"{secrets.randbelow(1_000_000):06d}"
         create_recovery_code(email, customer_id, code)
-        send_recovery_code_email(email, code)
+        try:
+            send_recovery_code_email(email, code)
+        except Exception:
+            logger.warning("Recovery email delivery failed.")
         return
     # Do not disclose whether an email has an account or active subscription.
 
@@ -140,8 +155,14 @@ def confirm_api_key_recovery(email: str, code: str) -> None:
     if not record or not record["active"] or not record.get("subscription_id"):
         raise ValueError("The account is not eligible for API key recovery.")
     subscription = stripe.Subscription.retrieve(record["subscription_id"])
-    if str(subscription.get("status", "canceled")) not in {"active", "trialing", "past_due"}:
+    status = str(subscription.get("status", "canceled"))
+    if status not in {"active", "trialing", "past_due"}:
         raise ValueError("The account is not eligible for API key recovery.")
+    if status == "past_due" and record.get("past_due_since"):
+        started = datetime.fromisoformat(record["past_due_since"])
+        grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
+        if datetime.now(timezone.utc) - started > timedelta(hours=grace_hours):
+            raise ValueError("The account is not eligible for API key recovery.")
     new_key = rotate_api_key(record["id"])
     send_api_key_email(email, new_key)
 
