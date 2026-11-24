@@ -74,6 +74,10 @@ class CheckoutRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
+class ClaimRequest(BaseModel):
+    session_id: str = Field(min_length=10, max_length=255)
+
+
 def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
