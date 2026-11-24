@@ -217,6 +217,12 @@ def test_checkout_completed_webhook_emails_same_encrypted_key_once(tmp_path, mon
         "id": "sub_email_1", "customer": "cus_email_1", "status": "active",
         "metadata": {"plan": "starter"}, "items": {"data": []},
     })
+    monkeypatch.setattr(billing.stripe.checkout.Session, "retrieve", lambda _id: {
+        "id": "cs_checkout_email_1", "status": "complete", "mode": "subscription",
+        "payment_status": "paid", "metadata": {"plan": "starter", "signup_email": "buyer@example.com"},
+        "customer_details": {"email": "buyer@example.com"}, "customer": "cus_email_1",
+        "subscription": "sub_email_1",
+    })
     monkeypatch.setattr(billing, "send_api_key_email", lambda email, key: delivered.append((email, key)))
 
     first = handle_webhook(b"{}", "valid-signature")
@@ -229,6 +235,10 @@ def test_checkout_completed_webhook_emails_same_encrypted_key_once(tmp_path, mon
     assert delivered[0][0] == "buyer@example.com"
     assert delivered[0][1] == delivery["api_key"]
     assert delivery["email_sent_at"] is not None
+    browser_key = claim_checkout_key("cs_checkout_email_1")
+    assert browser_key == delivery["api_key"]
+    with pytest.raises(ValueError, match="already been claimed"):
+        claim_checkout_key("cs_checkout_email_1")
 
 
 
@@ -282,3 +292,50 @@ def test_checkout_is_disabled_without_encrypted_key_and_email_delivery(monkeypat
     monkeypatch.delenv("FROM_EMAIL", raising=False)
     with pytest.raises(RuntimeError, match="Secure API-key encryption and email delivery"):
         create_checkout_session("starter", "buyer@example.com")
+
+
+
+def test_checkout_webhook_retries_email_with_same_key(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+    from app.billing import handle_webhook
+    from app.security import checkout_key_delivery
+    import app.billing as billing
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "checkout-retry.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    monkeypatch.setenv("API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_placeholder")
+    monkeypatch.setenv("FROM_EMAIL", "Invoice API <no-reply@example.com>")
+    init_db()
+    event = {
+        "id": "evt_checkout_retry_1", "created": 500,
+        "type": "checkout.session.completed",
+        "data": {"object": {
+            "id": "cs_checkout_retry_1", "status": "complete", "mode": "subscription",
+            "payment_status": "paid", "metadata": {"plan": "starter"},
+            "customer_details": {"email": "buyer@example.com"},
+            "customer": "cus_retry_1", "subscription": "sub_retry_1",
+        }},
+    }
+    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(billing.stripe.Subscription, "retrieve", lambda _id: {
+        "id": "sub_retry_1", "customer": "cus_retry_1", "status": "active",
+        "metadata": {"plan": "starter"}, "items": {"data": []},
+    })
+    calls = []
+    def fail_first_delivery(email, key):
+        calls.append(key)
+        if len(calls) == 1:
+            raise RuntimeError("temporary email outage")
+    monkeypatch.setattr(billing, "send_api_key_email", fail_first_delivery)
+
+    with pytest.raises(RuntimeError, match="temporary email outage"):
+        handle_webhook(b"{}", "valid-signature")
+    success = handle_webhook(b"{}", "valid-signature")
+    delivery = checkout_key_delivery("cs_checkout_retry_1")
+
+    assert success["outcome"] == "email_delivered"
+    assert len(calls) == 2
+    assert calls[0] == calls[1] == delivery["api_key"]
+    assert delivery["email_sent_at"] is not None
