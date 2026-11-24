@@ -1,13 +1,51 @@
 import pytest
+from fastapi.testclient import TestClient
 
-from app.billing import create_checkout_session
+from app.billing import create_checkout_session, claim_checkout_key
 from app.security import create_api_key, get_key_record, init_db, set_subscription
+from app.main import app
 
 
 def test_checkout_requires_server_side_stripe_configuration(monkeypatch):
     monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
     with pytest.raises(RuntimeError, match="Stripe billing is not configured"):
-        create_checkout_session({"id": 1}, "starter", "buyer@example.com")
+        create_checkout_session("starter", "buyer@example.com")
+
+
+def test_public_checkout_does_not_require_an_api_key(monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("STRIPE_PRICE_STARTER", "price_test_starter")
+    monkeypatch.setenv("CHECKOUT_SUCCESS_URL", "https://example.com/dashboard")
+    monkeypatch.setenv("CHECKOUT_CANCEL_URL", "https://example.com/dashboard")
+    import app.billing as billing
+    class FakeSession:
+        url = "https://checkout.stripe.com/test-session"
+    monkeypatch.setattr(billing.stripe.checkout.Session, "create", lambda **kwargs: FakeSession())
+    with TestClient(app) as client:
+        response = client.post("/v1/billing/checkout", json={"plan":"starter","email":"buyer@example.com"})
+    assert response.status_code == 200
+    assert response.json()["checkout_url"].startswith("https://checkout.stripe.com/")
+
+
+def test_checkout_key_is_created_once_and_linked_to_subscription(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "claim.db"))
+    init_db()
+    import app.billing as billing
+    monkeypatch.setenv("STRIPE_SECRET_KEY","sk_test_example")
+    monkeypatch.setattr(billing.stripe.checkout.Session,"retrieve",lambda session_id: {
+        "status":"complete","mode":"subscription","payment_status":"paid",
+        "metadata":{"plan":"professional","signup_email":"buyer@example.com"},
+        "customer":"cus_test_1","subscription":"sub_test_1"})
+    monkeypatch.setattr(billing.stripe.Subscription,"retrieve",lambda sub_id: {"status":"active"})
+    key=claim_checkout_key("cs_test_1")
+    record=get_key_record(key)
+    assert record["active"] == 1
+    assert record["plan"] == "professional"
+    assert record["monthly_limit"] == 5000
+    assert record["stripe_customer_id"] == "cus_test_1"
+    assert record["subscription_id"] == "sub_test_1"
+    with pytest.raises(ValueError,match="already been claimed"):
+        claim_checkout_key("cs_test_1")
 
 
 def test_subscription_activates_api_key_and_sets_plan_quota(tmp_path, monkeypatch):
@@ -15,18 +53,9 @@ def test_subscription_activates_api_key_and_sets_plan_quota(tmp_path, monkeypatc
     init_db()
     raw_key, _ = create_api_key("billing customer", 1000)
     record = get_key_record(raw_key)
-
-    set_subscription(
-        record["id"],
-        "professional",
-        "active",
-        "cus_test_123",
-        "sub_test_123",
-        5000,
-    )
+    set_subscription(record["id"],"professional","active","cus_test_123","sub_test_123",5000)
     updated = get_key_record(raw_key)
-    assert updated["active"] == 1
-    assert updated["plan"] == "professional"
+    assert updated["active"] == 1 and updated["plan"] == "professional"
     assert updated["monthly_limit"] == 5000
     assert updated["stripe_customer_id"] == "cus_test_123"
     assert updated["subscription_id"] == "sub_test_123"
@@ -37,13 +66,5 @@ def test_past_due_subscription_disables_api_key(tmp_path, monkeypatch):
     init_db()
     raw_key, _ = create_api_key("billing customer", 1000)
     record = get_key_record(raw_key)
-
-    set_subscription(
-        record["id"],
-        "starter",
-        "past_due",
-        "cus_test_456",
-        "sub_test_456",
-        1000,
-    )
+    set_subscription(record["id"],"starter","past_due","cus_test_456","sub_test_456",1000)
     assert get_key_record(raw_key)["active"] == 0
