@@ -33,6 +33,7 @@ jobs:
           import time
           import urllib.error
           import urllib.request
+          import subprocess
 
           healthy = False
           for attempt in range(30):
@@ -44,9 +45,11 @@ jobs:
                           break
               except (urllib.error.URLError, TimeoutError, OSError):
                   time.sleep(1)
+          if not healthy:
+              subprocess.run(["docker", "logs", "invoice-api-smoke"], check=False)
+              raise SystemExit("Container health smoke test failed")
           PY
           docker logs invoice-api-smoke
           docker rm -f invoice-api-smoke
-          test "$healthy" = "True"
       - name: Run tests
         run: PYTHONPATH=. pytest -q
