@@ -122,7 +122,7 @@ Authorization: Bearer iia_live_your_key
 ```
 
 - `POST /v1/extract-text` and `POST /v1/extract-file` require a valid key.
-- `GET /v1/usage` returns usage for the active Stripe subscription billing period when Stripe period boundaries are present; legacy/non-subscription keys fall back to the UTC calendar month.
+- `GET /v1/usage` returns billable page usage for the active Stripe subscription billing period when Stripe period boundaries are present; a pasted-text request counts as one page. Legacy/non-subscription keys fall back to the UTC calendar month.
 - `DELETE /v1/account` cancels non-terminal Stripe subscriptions for the authenticated customer, then deletes that customer's local API keys, usage, checkout-delivery records, and recovery codes. Stripe may retain payment/invoice records as legally required.
 - `POST /v1/admin/api-keys` creates a customer key. Protect this endpoint with the server-side `API_ADMIN_KEY` environment variable and the `X-Admin-Key` header.
 - Customer API keys are authenticated by SHA-256 hashes. A separately Fernet-encrypted copy is retained for webhook email retries and browser claim; keep API_KEY_ENCRYPTION_KEY secret and backed up. Email-based recovery verifies a one-time code and rotates the key.
