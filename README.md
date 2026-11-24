@@ -8,8 +8,8 @@ A global invoice extraction API from Quillvora, built for businesses and develop
 
 - Extract supplier, invoice number, date, currency, subtotal, tax, and total.
 - Accept PDF, PNG, JPG/JPEG, WEBP, TIFF, and BMP uploads.
-- OCR scanned PDFs and phone photos with Tesseract.
-- Detect ISO currency codes explicitly printed on an invoice, including USD and BZD; otherwise currency remains unknown.
+- OCR scanned PDFs and phone photos with Tesseract (English and Spanish language data in the Docker image).
+- Detect explicit currency codes and symbols including BZD; ambiguous dollar symbols remain unknown.
 - Return warnings when required fields are missing or subtotal plus tax does not match the total.
 - Enforce upload-size and PDF-page limits.
 - Process uploads in memory; the API does not save invoice files to disk.
@@ -32,7 +32,7 @@ Open http://127.0.0.1:8000/docs.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+sudo apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -63,7 +63,7 @@ curl -X POST http://127.0.0.1:8000/v1/extract-file \
   -F "file=@invoice-scan.pdf"
 ```
 
-The response contains `fields`, `confidence`, `confidence_type`, `warnings`, `review_required`, `extraction_metadata`, and `source` metadata. The confidence values are deliberately labeled heuristic presence indicators, not statistically calibrated probabilities or accuracy guarantees. Every invoice result requires review against the source document.
+The response contains `fields`, `confidence`, `confidence_type`, `warnings`, `review_required`, `extraction_metadata`, and `source` metadata. Confidence is currently unavailable (null) because it has not been calibrated against a representative labelled invoice corpus. Every result must be reviewed against the original.
 
 ## Configuration
 
@@ -100,9 +100,9 @@ A test suite is included in `tests/`. Tests use synthetic invoices only; they do
 
 1. Test OCR and extraction against permissioned real invoices from multiple industries, countries, layouts, and currencies.
 2. Improve extraction for line items, discounts, delivery charges, sales taxes, VAT/GST, and varied date formats.
-3. Continue hardening API-key recovery, account ownership verification, and per-customer usage limits.
-4. Add privacy and retention controls, customer data deletion, audit logs, and secure secret management.
-5. Complete checkout key email delivery and recovery before enabling public subscription sales.
+3. Build a representative benchmark of at least 200 permissioned real invoices and measure field-level accuracy by format, country, language, and layout.
+4. Complete privacy/terms, retention and deletion controls, operational logging, monitoring, backups and restore tests.
+5. Verify the full Stripe Sandbox lifecycle and a staging Render deployment before public paid access.
 6. Add an optional AI extraction provider behind a configurable interface, with strict privacy controls and validation.
 
 Do not put API secrets or customer invoices in source control. Do not use extracted data to automatically pay or approve invoices.
@@ -119,7 +119,7 @@ Authorization: Bearer iia_live_your_key
 - `POST /v1/extract-text` and `POST /v1/extract-file` require a valid key.
 - `GET /v1/usage` returns the current UTC calendar month's request count and remaining quota.
 - `POST /v1/admin/api-keys` creates a customer key. Protect this endpoint with the server-side `API_ADMIN_KEY` environment variable and the `X-Admin-Key` header.
-- Customer API keys are stored as SHA-256 hashes; the raw key is shown only once when created.
+- Customer API keys are authenticated by SHA-256 hashes. A separately Fernet-encrypted copy is retained for webhook email retries and browser claim; keep API_KEY_ENCRYPTION_KEY secret and backed up. Email-based recovery verifies a one-time code and rotates the key.
 - `DEFAULT_MONTHLY_LIMIT` sets the default monthly request allowance (default 1,000).
 - `DATABASE_PATH` sets the SQLite database file location. Production deployments must use persistent storage and backups.
 
