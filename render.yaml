@@ -27,11 +27,11 @@ services:
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: STRIPE_PRICE_STARTER
-        value: price_1UfA89KqMzLsvG4ZAFDh3MJU
+        sync: false
       - key: STRIPE_PRICE_PROFESSIONAL
-        value: price_1UfA8MKqMzLsvG4Zhn16WocE
+        sync: false
       - key: STRIPE_PRICE_BUSINESS
-        value: price_1UfA8OKqMzLsvG4ZAM90zuJE
+        sync: false
       - key: CHECKOUT_SUCCESS_URL
         sync: false
       - key: CHECKOUT_CANCEL_URL
