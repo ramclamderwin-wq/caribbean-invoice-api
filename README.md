@@ -87,6 +87,10 @@ docker run --rm -p 8000:8000 quillvora-api
 
 A `render.yaml` is included for a simple Render Docker deployment. The customer-facing product brand is Quillvora; Divine Group Holdings LLC remains the legal company. After pushing the repository, create a new Blueprint in Render and select this repository. Confirm the service URL and test `/health` and `/docs`.
 
+## PDF dependency and licensing
+
+The runtime uses pypdfium2/PDFium for PDF text extraction and rendering instead of PyMuPDF. Review THIRD_PARTY_NOTICES.md and retain the upstream PDFium bundled license materials in any distributed container image. The exact wheel/build and bundled dependencies still require legal review before commercial launch.
+
 ## Development tests
 
 ```bash
