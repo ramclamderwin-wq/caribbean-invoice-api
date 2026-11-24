@@ -1,6 +1,6 @@
 import io
 
-import fitz
+import pymupdf as fitz
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
