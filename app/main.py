@@ -171,15 +171,18 @@ def require_api_key(authorization: str | None = Header(default=None)) -> dict[st
         raise HTTPException(status_code=401, detail="API key is invalid or inactive.")
     if record.get("subscription_status") == "past_due":
         started = record.get("past_due_since")
-        if started:
-            try:
-                past_due_at = datetime.fromisoformat(started)
-            except ValueError:
-                past_due_at = datetime.now(timezone.utc)
-            grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
-            if datetime.now(timezone.utc) - past_due_at > timedelta(hours=grace_hours):
-                revoke_api_key(record["id"])
-                raise HTTPException(status_code=402, detail="Payment is overdue. Update your payment method to restore API access.")
+        grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
+        # Legacy past_due rows without a timestamp cannot receive an indefinite grace period.
+        if not started:
+            revoke_api_key(record["id"])
+            raise HTTPException(status_code=402, detail="Payment is overdue. Update your payment method to restore API access.")
+        try:
+            past_due_at = datetime.fromisoformat(started)
+        except ValueError:
+            past_due_at = datetime.now(timezone.utc) - timedelta(hours=grace_hours + 1)
+        if datetime.now(timezone.utc) - past_due_at > timedelta(hours=grace_hours):
+            revoke_api_key(record["id"])
+            raise HTTPException(status_code=402, detail="Payment is overdue. Update your payment method to restore API access.")
     return record
 
 
