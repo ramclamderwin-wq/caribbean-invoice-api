@@ -4,11 +4,17 @@ import hashlib
 import os
 import secrets
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
 DEFAULT_MONTHLY_LIMIT = int(os.getenv("DEFAULT_MONTHLY_LIMIT", "1000"))
+
+
+class UsageLimitExceeded(Exception):
+    def __init__(self, message: str, *, rate_limited: bool = False):
+        super().__init__(message)
+        self.rate_limited = rate_limited
 
 
 def _db_path() -> str:
@@ -18,8 +24,9 @@ def _db_path() -> str:
 def _connect() -> sqlite3.Connection:
     path = _db_path()
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=15)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=15000")
     return conn
 
 
@@ -103,14 +110,36 @@ def key_usage(key_id: int, monthly_limit: int) -> dict[str, int]:
     return {"used": used, "monthly_limit": monthly_limit, "remaining": max(0, monthly_limit-used)}
 
 
+def reserve_usage(key_id: int, monthly_limit: int, requests_per_minute: int) -> None:
+    """Atomically meter an attempt before expensive work, preventing quota races."""
+    now = datetime.now(timezone.utc)
+    now_text = now.isoformat()
+    month = now.strftime("%Y-%m")
+    cutoff = (now - timedelta(seconds=60)).isoformat()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        used = conn.execute(
+            "SELECT COUNT(*) AS n FROM api_usage WHERE api_key_id=? AND substr(used_at,1,7)=?",
+            (key_id, month)).fetchone()["n"]
+        if int(used) >= monthly_limit:
+            raise UsageLimitExceeded("Monthly API usage limit reached.")
+        recent = conn.execute(
+            "SELECT COUNT(*) AS n FROM api_usage WHERE api_key_id=? AND used_at>=?",
+            (key_id, cutoff)).fetchone()["n"]
+        if int(recent) >= requests_per_minute:
+            raise UsageLimitExceeded("Per-minute API rate limit reached. Please retry shortly.", rate_limited=True)
+        conn.execute("INSERT INTO api_usage(api_key_id,used_at) VALUES (?,?)", (key_id, now_text))
+
+
 def record_usage(key_id: int) -> None:
+    # Backward-compatible helper for administrative/test use. API requests
+    # should use reserve_usage so quota checks and increments are atomic.
     with _connect() as conn:
         conn.execute("INSERT INTO api_usage(api_key_id,used_at) VALUES (?,?)",
                      (key_id, datetime.now(timezone.utc).isoformat()))
 
 
 def requests_in_last_minute(key_id: int) -> int:
-    from datetime import timedelta
     cutoff = (datetime.now(timezone.utc)-timedelta(seconds=60)).isoformat()
     with _connect() as conn:
         row = conn.execute("SELECT COUNT(*) AS used FROM api_usage WHERE api_key_id=? AND used_at>=?",
