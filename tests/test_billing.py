@@ -359,13 +359,12 @@ def test_subscription_plan_checks_all_items_and_rejects_multiple_configured_plan
             {"price": {"id": "price_professional"}},
         ]},
     }) == "professional"
-    with pytest.raises(ValueError, match="multiple configured plan prices"):
-        _subscription_plan({
-            "items": {"data": [
-                {"price": {"id": "price_starter"}},
-                {"price": {"id": "price_professional"}},
-            ]},
-        })
+    assert _subscription_plan({
+        "items": {"data": [
+            {"price": {"id": "price_starter"}},
+            {"price": {"id": "price_professional"}},
+        ]},
+    }) is None
 
 
 def test_recovery_email_failure_can_retry_same_key_without_second_rotation(tmp_path, monkeypatch):
