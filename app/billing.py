@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet
 from app.security import (
     apply_stripe_subscription_event, checkout_key_delivery, mark_checkout_email_sent,
     provision_checkout_key, record_stripe_event, get_key_record_by_customer_id,
-    create_recovery_code, prepare_recovery_key, mark_recovery_email_sent, rotate_api_key,
+    create_recovery_code, prepare_recovery_key, mark_recovery_email_sent,
 )
 from app.email_delivery import send_api_key_email, send_recovery_code_email
 
@@ -152,7 +152,6 @@ def confirm_api_key_recovery(email: str, code: str) -> None:
     # The key rotation and encrypted pending-delivery record are committed atomically.
     # If email delivery fails, the same code can retry delivery of the same key.
     from app.security import prepare_recovery_key, mark_recovery_email_sent
-    from app.security import _recovery_code_hash
     customer_id = None
     # Resolve the matching customer from the latest recovery-code record only after
     # checking eligible Stripe customers for this email.
