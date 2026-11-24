@@ -73,7 +73,10 @@ def handle_webhook(payload: bytes, signature: str | None) -> dict[str, str]:
         raise RuntimeError("Stripe webhook signing secret is not configured.")
     if not signature:
         raise ValueError("Missing Stripe-Signature header.")
-    event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
+    try:
+        event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
+    except stripe.error.SignatureVerificationError as exc:
+        raise ValueError("Invalid Stripe webhook signature.") from exc
     event_type = event["type"]
     obj = event["data"]["object"]
 
