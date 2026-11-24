@@ -24,7 +24,8 @@ from starlette.concurrency import run_in_threadpool
 
 from app.security import (
     UsageLimitExceeded, create_api_key, get_key_record, init_db, key_usage,
-    reserve_usage, reserve_public_rate_limit, rotate_api_key, revoke_api_key, database_health_check, delete_customer_local_data,
+    reserve_usage, reserve_request_event, release_usage_reservation, reserve_public_rate_limit,
+    rotate_api_key, revoke_api_key, database_health_check, delete_customer_local_data,
 )
 from app.billing import (
     create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook,
@@ -342,11 +343,56 @@ async def billing_webhook(
 
 
 def _record_request(key_record: dict[str, Any]) -> None:
+    """Count an API attempt for abuse throttling, regardless of billable outcome."""
     rpm = int(os.getenv("REQUESTS_PER_MINUTE", "60"))
     try:
-        reserve_usage(key_record["id"], key_record["monthly_limit"], rpm)
+        reserve_request_event(key_record["id"], rpm)
     except UsageLimitExceeded as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
+
+
+def _reserve_page_usage(key_record: dict[str, Any], pages: int) -> str:
+    rpm = int(os.getenv("REQUESTS_PER_MINUTE", "60"))
+    try:
+        return reserve_usage(
+            key_record["id"], key_record["monthly_limit"], rpm,
+            units=pages, count_request=False,
+        )
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+
+
+def _preflight_page_count(data: bytes, suffix: str) -> int:
+    """Validate enough of the upload to know billable page units before OCR."""
+    if suffix == ".pdf":
+        if not data.startswith(b"%PDF"):
+            raise HTTPException(status_code=400, detail="The file does not appear to be a valid PDF.")
+        try:
+            document = pdfium.PdfDocument(data)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="The uploaded PDF is invalid or unreadable.") from exc
+        try:
+            page_count = len(document)
+        finally:
+            document.close()
+        if page_count < 1:
+            raise HTTPException(status_code=400, detail="The uploaded PDF contains no pages.")
+        if page_count > MAX_PDF_PAGES:
+            raise HTTPException(status_code=413, detail=f"PDF exceeds the {MAX_PDF_PAGES}-page limit.")
+        return page_count
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            image = Image.open(io.BytesIO(data))
+            if image.width <= 0 or image.height <= 0 or image.width * image.height > MAX_IMAGE_PIXELS:
+                raise HTTPException(status_code=413, detail="Image dimensions are too large.")
+            image.verify()
+    except HTTPException:
+        raise
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise HTTPException(status_code=400, detail="The uploaded image is invalid, unsafe, or unreadable.") from exc
+    return 1
 
 
 def _require_tesseract() -> None:
@@ -539,6 +585,7 @@ async def health() -> dict[str, str]:
 @app.post("/v1/extract-text")
 def extract_text(request: TextRequest, key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
     _record_request(key_record)
+    _reserve_page_usage(key_record, 1)
     result = extract_invoice_fields(request.text)
     result["source"] = {"type": "text", "ocr_used": False}
     return result
@@ -546,8 +593,8 @@ def extract_text(request: TextRequest, key_record: dict[str, Any] = Depends(requ
 
 @app.post("/v1/extract-file")
 async def extract_file(file: UploadFile = File(...), key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
-    # Reserve quota before reading or decoding untrusted content. Failed and
-    # malformed attempts are metered too, so expensive failures are not free.
+    # Rate-limit every attempt, but only reserve billable page units after the
+    # upload is validated and its page count is known.
     _record_request(key_record)
     filename = Path(file.filename or "upload").name
     suffix = Path(filename).suffix.lower()
@@ -560,18 +607,24 @@ async def extract_file(file: UploadFile = File(...), key_record: dict[str, Any] 
     if not data:
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
-    # All PDF parsing, image decoding and OCR run off the ASGI event loop.
-    # Wait asynchronously for a file slot so queued uploads do not consume
-    # worker threads or starve synchronous endpoints.
-    async with _FILE_PROCESSING_SEMAPHORE:
-        text, ocr_used, page_count, source_type = await run_in_threadpool(
-            _process_file, data, suffix, filename
-        )
-    if not text.strip():
-        raise HTTPException(status_code=422, detail="No readable text was found. Try a clearer scan or higher-resolution photo.")
-    result = extract_invoice_fields(text)
-    result["source"] = {"type": source_type, "filename": filename, "ocr_used": ocr_used, "pages": page_count}
-    return result
+    page_units = await run_in_threadpool(_preflight_page_count, data, suffix)
+    reservation_id = _reserve_page_usage(key_record, page_units)
+    try:
+        # All PDF parsing, image decoding and OCR run off the ASGI event loop.
+        # Wait asynchronously for a file slot so queued uploads do not consume
+        # worker threads or starve synchronous endpoints.
+        async with _FILE_PROCESSING_SEMAPHORE:
+            text, ocr_used, page_count, source_type = await run_in_threadpool(
+                _process_file, data, suffix, filename
+            )
+        if not text.strip():
+            raise HTTPException(status_code=422, detail="No readable text was found. Try a clearer scan or higher-resolution photo.")
+        result = extract_invoice_fields(text)
+        result["source"] = {"type": source_type, "filename": filename, "ocr_used": ocr_used, "pages": page_count}
+        return result
+    except Exception:
+        release_usage_reservation(key_record["id"], reservation_id)
+        raise
 
 
 @app.post("/v1/extract-pdf", include_in_schema=False)
