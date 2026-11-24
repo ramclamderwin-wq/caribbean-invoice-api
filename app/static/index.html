@@ -21,6 +21,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0f172a;color:#e2e8f0
 </main>
 <script>
 let apiKey="";
+const el=id=>document.getElementById(id);
 document.querySelectorAll("[data-plan]").forEach(button=>button.onclick=async()=>{
  const email=el("email").value.trim();if(!email){el("signup-status").textContent="Enter your email address first.";return}
  el("signup-status").textContent="Opening secure Stripe Checkout…";
@@ -32,6 +33,7 @@ el("copy-key").onclick=async()=>{try{await navigator.clipboard.writeText(el("new
 
 const el=id=>document.getElementById(id);
 async function request(path,options={}){const response=await fetch(path,{...options,headers:{...(options.headers||{}),Authorization:"Bearer "+apiKey}});const data=await response.json().catch(()=>({detail:"Unexpected server response"}));if(!response.ok)throw new Error(data.detail||"Request failed");return data}
-el("billing-portal").onclick=async()=>{try{const p=await request("/v1/billing/portal",{method:"POST"});location.href=p.portal_url}catch(e){el("status").textContent=e.message}};\nel("load").onclick=async()=>{apiKey=el("key").value.trim();if(!apiKey){el("status").textContent="Enter an API key.";return}try{const u=await request("/v1/usage");el("used").textContent=u.used;el("limit").textContent=u.monthly_limit;el("remaining").textContent=u.remaining;el("status").textContent="Connected successfully."}catch(e){apiKey="";el("status").textContent=e.message}};
+el("billing-portal").onclick=async()=>{try{const p=await request("/v1/billing/portal",{method:"POST"});location.href=p.portal_url}catch(e){el("status").textContent=e.message}};
+el("load").onclick=async()=>{apiKey=el("key").value.trim();if(!apiKey){el("status").textContent="Enter an API key.";return}try{const u=await request("/v1/usage");el("used").textContent=u.used;el("limit").textContent=u.monthly_limit;el("remaining").textContent=u.remaining;el("status").textContent="Connected successfully."}catch(e){apiKey="";el("status").textContent=e.message}};
 el("extract").onclick=async()=>{el("result").textContent="Processing…";try{const data=await request("/v1/extract-text",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:el("invoice").value})});el("result").textContent=JSON.stringify(data,null,2);const u=await request("/v1/usage");el("used").textContent=u.used;el("limit").textContent=u.monthly_limit;el("remaining").textContent=u.remaining}catch(e){el("result").textContent=e.message}};
 </script></body></html>
