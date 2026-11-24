@@ -174,7 +174,7 @@ def confirm_api_key_recovery(email: str, code: str) -> None:
         send_api_key_email(email, new_key)
         mark_recovery_email_sent(email, code)
         return
-    raise ValueError("The recovery code is invalid, expired, or the account is not eligible.")
+    raise ValueError("The recovery code is invalid, expired, or already used, or the account is not eligible.")
 
 def _subscription_plan(subscription: Any) -> str | None:
     """Resolve one unambiguous plan from all configured subscription item prices."""
