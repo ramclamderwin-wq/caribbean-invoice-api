@@ -28,7 +28,7 @@ document.querySelectorAll("[data-plan]").forEach(button=>button.onclick=async()=
  try{const r=await fetch("/v1/billing/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plan:button.dataset.plan,email})});const d=await r.json();if(!r.ok)throw new Error(d.detail||"Could not start checkout.");location.href=d.checkout_url}catch(e){el("signup-status").textContent=e.message}
 });
 const checkoutSession=new URLSearchParams(location.search).get("session_id");
-if(checkoutSession){el("claim").hidden=false;fetch("/v1/billing/claim?session_id="+encodeURIComponent(checkoutSession)).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.detail||"Could not claim API key.");el("new-key").textContent=d.api_key;apiKey=d.api_key;el("key").value=d.api_key;el("status").textContent="Account activated. Save your API key securely.";}).catch(e=>{el("new-key").textContent=e.message})}
+if(checkoutSession){el("claim").hidden=false;fetch("/v1/billing/claim",{method:"POST",cache:"no-store",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:checkoutSession})}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.detail||"Could not claim API key.");el("new-key").textContent=d.api_key;apiKey=d.api_key;el("key").value=d.api_key;el("status").textContent="Account activated. Save your API key securely.";history.replaceState({},document.title,location.pathname);}).catch(e=>{el("new-key").textContent=e.message})}
 el("copy-key").onclick=async()=>{try{await navigator.clipboard.writeText(el("new-key").textContent);el("copy-key").textContent="Copied"}catch(e){el("copy-key").textContent="Select and copy the key above"}};
 
 
