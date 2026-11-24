@@ -314,6 +314,11 @@ def create_recovery_code(email: str, customer_id: str, code: str) -> None:
             "UPDATE api_key_recovery_codes SET used_at=? WHERE email=? AND used_at IS NULL",
             (now.isoformat(), email.lower()),
         )
+        # A newly requested code supersedes any undelivered encrypted replacement.
+        conn.execute(
+            "UPDATE api_key_recovery_codes SET encrypted_api_key=NULL WHERE email=? AND delivered_at IS NULL",
+            (email.lower(),),
+        )
         conn.execute(
             """INSERT INTO api_key_recovery_codes(
                email,customer_id,code_hash,created_at,expires_at)
