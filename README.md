@@ -1,6 +1,6 @@
-# Invoice Intelligence API
+# InvoSentry API
 
-A global invoice extraction API. It accepts pasted invoice text, text-based PDFs, scanned PDFs, and common invoice photos, then returns structured JSON for review. It is designed for businesses and developers processing invoices across markets and currencies.
+A global invoice extraction API from InvoSentry, built for businesses and developers processing invoices across markets and currencies. It accepts pasted invoice text, text-based PDFs, scanned PDFs, and common invoice photos, then returns structured JSON for review. It is designed for businesses and developers processing invoices across markets and currencies.
 
 > **Important:** This is an early-stage extraction tool, not accounting, tax, audit, or payment-approval software. OCR and rule-based extraction can make mistakes. Always compare results with the original invoice.
 
@@ -76,11 +76,11 @@ The response contains `fields`, `confidence`, `warnings`, `review_required`, and
 ## Deploy with Docker
 
 ```bash
-docker build -t invoice-intelligence-api .
-docker run --rm -p 8000:8000 invoice-intelligence-api
+docker build -t invosentry-api .
+docker run --rm -p 8000:8000 invosentry-api
 ```
 
-A `render.yaml` is included for a simple Render Docker deployment. After pushing the repository, create a new Blueprint in Render and select this repository. Confirm the service URL and test `/health` and `/docs`.
+A `render.yaml` is included for a simple Render Docker deployment. The customer-facing product brand is InvoSentry; Divine Group Holdings LLC remains the legal company. After pushing the repository, create a new Blueprint in Render and select this repository. Confirm the service URL and test `/health` and `/docs`.
 
 ## Development tests
 
@@ -144,7 +144,7 @@ Stripe Checkout is designed for public customer signup. New customers do not nee
 
 The dashboard at `/dashboard` contains plan selection and a one-time API-key claim screen. For now, the key is displayed on the post-checkout page; an email delivery provider has not yet been configured. Customers must copy and securely save the key when it appears.
 
-Plans configured for the Sandbox:
+Planned subscription tiers (confirm the matching Stripe Sandbox products and prices before launch):
 - Starter: $19/month, 1,000 API requests.
 - Professional: $49/month, 5,000 API requests.
 - Business: $149/month, 20,000 API requests.
