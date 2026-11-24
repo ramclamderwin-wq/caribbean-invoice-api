@@ -70,8 +70,13 @@ The response contains `fields`, `confidence`, `confidence_type`, `warnings`, `re
 - `MAX_UPLOAD_BYTES`: maximum upload size (default 15 MiB).
 - `MAX_PDF_PAGES`: maximum PDF pages (default 20).
 - `MAX_IMAGE_PIXELS`: maximum image pixels (default 25 million).
+- `MAX_PDF_PAGE_PIXELS`: maximum rasterized pixels per scanned PDF page (default 16 million).
+- `MAX_OCR_PAGES`: maximum pages requiring OCR in one PDF (default 5).
+- `OCR_TIMEOUT_SECONDS`: timeout per OCR page/image (default 30 seconds).
+- `OCR_LANGUAGES`: Tesseract language codes (default `eng+spa`).
+- `MAX_CONCURRENT_FILE_JOBS`: concurrent file decode/OCR jobs (default 1).
 - `TESSERACT_CMD`: optional absolute path to the Tesseract executable.
-- `CORS_ORIGINS`: comma-separated allowed origins. Set explicit production origins before connecting a browser frontend.
+- `CORS_ORIGINS`: comma-separated allowed origins. Cross-origin access is disabled by default; set only exact frontend origins if needed.
 
 ## Deploy with Docker
 
@@ -153,6 +158,7 @@ Required environment variables:
 - `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (keep these only in Render secret settings).
 - `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PROFESSIONAL`, `STRIPE_PRICE_BUSINESS`.
 - `CHECKOUT_SUCCESS_URL`, `CHECKOUT_CANCEL_URL`, `CUSTOMER_PORTAL_RETURN_URL`.
+- `CHECKOUT_RATE_LIMIT` (default 5 requests/hour per client IP), `CLAIM_RATE_LIMIT` (default 10 requests/minute per client IP), and `PAYMENT_GRACE_HOURS` (default 72).
 - Optional quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
 
 Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion/pause/resume and invoice payment failed/paid events before testing subscription lifecycle. Checkout-completed key delivery by webhook is not implemented yet. Stripe Tax remains disabled until the company determines its registration and collection obligations.
