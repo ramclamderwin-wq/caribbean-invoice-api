@@ -6,6 +6,9 @@ import os
 import re
 import shutil
 import warnings
+import logging
+import secrets
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -30,6 +33,7 @@ from app.billing import (
 from app.extraction import extract_invoice_fields
 
 APP_NAME = "Quillvora API"
+logger = logging.getLogger("invoice_api")
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "20"))
 MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "25000000"))
@@ -424,7 +428,19 @@ def _process_file(data: bytes, suffix: str, filename: str) -> tuple[str, bool, i
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
+    started = time.monotonic()
+    request_id = secrets.token_hex(8)
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("request_failed request_id=%s method=%s path=%s", request_id, request.method, request.url.path)
+        raise
+    duration_ms = round((time.monotonic() - started) * 1000, 2)
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request_complete request_id=%s method=%s path=%s status=%s duration_ms=%s",
+        request_id, request.method, request.url.path, response.status_code, duration_ms,
+    )
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
