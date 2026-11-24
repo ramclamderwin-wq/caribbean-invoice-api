@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import threading
 import os
 import re
 import shutil
@@ -32,6 +33,8 @@ MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "25000000"))
 MAX_PDF_PAGE_PIXELS = int(os.getenv("MAX_PDF_PAGE_PIXELS", "16000000"))
 MAX_OCR_PAGES = int(os.getenv("MAX_OCR_PAGES", "5"))
 OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "30"))
+OCR_LANGUAGES = os.getenv("OCR_LANGUAGES", "eng+spa")
+_FILE_PROCESSING_SEMAPHORE = threading.BoundedSemaphore(int(os.getenv("MAX_CONCURRENT_FILE_JOBS", "1")) )
 TESSERACT_CMD = os.getenv("TESSERACT_CMD")
 if TESSERACT_CMD:
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
@@ -214,8 +217,9 @@ def _ocr_image(image: Image.Image) -> str:
     if image.width <= 0 or image.height <= 0 or image.width * image.height > MAX_IMAGE_PIXELS:
         raise HTTPException(status_code=413, detail="Image dimensions are too large.")
     try:
+        prepared = ImageOps.autocontrast(ImageOps.grayscale(image.convert("RGB")))
         return pytesseract.image_to_string(
-            image.convert("RGB"), lang="eng", timeout=OCR_TIMEOUT_SECONDS
+            prepared, lang=OCR_LANGUAGES, config="--psm 6", timeout=OCR_TIMEOUT_SECONDS
         )
     except pytesseract.TesseractNotFoundError:
         _require_tesseract()
@@ -263,6 +267,12 @@ def _extract_pdf(data: bytes) -> tuple[str, bool, int]:
         return "\n".join(chunks), used_ocr, document.page_count
     finally:
         document.close()
+
+
+def _process_file_with_limit(data: bytes, suffix: str, filename: str) -> tuple[str, bool, int, str]:
+    # Bound concurrent image/PDF decodes to protect the 512 MB deployment tier.
+    with _FILE_PROCESSING_SEMAPHORE:
+        return _process_file(data, suffix, filename)
 
 
 def _process_file(data: bytes, suffix: str, filename: str) -> tuple[str, bool, int, str]:
@@ -354,7 +364,7 @@ async def extract_file(file: UploadFile = File(...), key_record: dict[str, Any] 
 
     # All PDF parsing, image decoding and OCR run off the ASGI event loop.
     text, ocr_used, page_count, source_type = await run_in_threadpool(
-        _process_file, data, suffix, filename
+        _process_file_with_limit, data, suffix, filename
     )
     if not text.strip():
         raise HTTPException(status_code=422, detail="No readable text was found. Try a clearer scan or higher-resolution photo.")
