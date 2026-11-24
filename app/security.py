@@ -87,7 +87,12 @@ def init_db() -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL,
             customer_id TEXT NOT NULL, code_hash TEXT NOT NULL,
             created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
-            attempts INTEGER NOT NULL DEFAULT 0, used_at TEXT)""")
+            attempts INTEGER NOT NULL DEFAULT 0, used_at TEXT,
+            encrypted_api_key TEXT, delivered_at TEXT)""")
+        recovery_columns = {row["name"] for row in conn.execute("PRAGMA table_info(api_key_recovery_codes)").fetchall()}
+        for name in ("encrypted_api_key", "delivered_at"):
+            if name not in recovery_columns:
+                conn.execute(f"ALTER TABLE api_key_recovery_codes ADD COLUMN {name} TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_recovery_email ON api_key_recovery_codes(email,created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_public_rate_limits ON public_rate_limit_events(subject_hash,action,created_at)")
 
@@ -340,6 +345,59 @@ def consume_recovery_code(email: str, code: str) -> str | None:
             return None
         conn.execute("UPDATE api_key_recovery_codes SET used_at=? WHERE id=?", (now.isoformat(), row["id"]))
         return str(row["customer_id"])
+
+
+def prepare_recovery_key(email: str, code: str, customer_id: str, key_id: int) -> str | None:
+    """Atomically rotate once and retain an encrypted, retryable delivery until email succeeds."""
+    now = datetime.now(timezone.utc)
+    supplied_hash = _recovery_code_hash(code)
+    fernet = _api_key_fernet()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """SELECT id,customer_id,code_hash,expires_at,attempts,used_at,
+                      encrypted_api_key,delivered_at
+               FROM api_key_recovery_codes WHERE email=? ORDER BY id DESC LIMIT 1""",
+            (email.lower(),),
+        ).fetchone()
+        if not row or str(row["customer_id"]) != customer_id or int(row["attempts"]) >= 5:
+            return None
+        # A retry after a mail outage reuses the exact same key without another rotation.
+        if row["used_at"]:
+            if not row["encrypted_api_key"] or row["delivered_at"]:
+                return None
+            try:
+                return fernet.decrypt(row["encrypted_api_key"].encode("ascii")).decode("utf-8")
+            except (InvalidToken, ValueError) as exc:
+                raise RuntimeError("The pending recovery key could not be decrypted. Check API_KEY_ENCRYPTION_KEY.") from exc
+        if datetime.fromisoformat(row["expires_at"]) < now:
+            conn.execute("UPDATE api_key_recovery_codes SET used_at=? WHERE id=?", (now.isoformat(), row["id"]))
+            return None
+        if not hmac.compare_digest(row["code_hash"], supplied_hash):
+            conn.execute("UPDATE api_key_recovery_codes SET attempts=attempts+1 WHERE id=?", (row["id"],))
+            return None
+        raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
+        encrypted = fernet.encrypt(raw_key.encode("utf-8")).decode("ascii")
+        cursor = conn.execute(
+            "UPDATE api_keys SET key_hash=? WHERE id=? AND active=1",
+            (hash_key(raw_key), key_id),
+        )
+        if cursor.rowcount != 1:
+            return None
+        conn.execute(
+            "UPDATE api_key_recovery_codes SET used_at=?,encrypted_api_key=? WHERE id=?",
+            (now.isoformat(), encrypted, row["id"]),
+        )
+        return raw_key
+
+
+def mark_recovery_email_sent(email: str, code: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE api_key_recovery_codes SET delivered_at=?
+               WHERE email=? AND code_hash=? AND encrypted_api_key IS NOT NULL AND delivered_at IS NULL""",
+            (datetime.now(timezone.utc).isoformat(), email.lower(), _recovery_code_hash(code)),
+        )
 
 
 def set_subscription(key_id: int, plan: str, status: str, customer_id: str | None,
