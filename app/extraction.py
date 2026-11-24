@@ -15,7 +15,8 @@ _CURRENCY_SYMBOLS = {"BZ$": "BZD", "$": None, "€": "EUR", "£": "GBP"}
 # must fail as a whole rather than silently becoming 1.00.
 _AMOUNT_TOKEN = re.compile(
     r"(?<![A-Za-z0-9.,])(?:BZ\$\s*|USD\s*|BZD\s*|EUR\s*|GBP\s*|"
-    r"CAD\s*|AUD\s*|[$€£]\s*)?"
+    r"CAD\s*|AUD\s*|NZD\s*|MXN\s*|JPY\s*|CHF\s*|INR\s*|SGD\s*|HKD\s*|"
+    r"BRL\s*|COP\s*|GTQ\s*|HNL\s*|CRC\s*|PAB\s*|DOP\s*|JMD\s*|TTD\s*|[$€£]\s*)?"
     r"\(?-?(?:\d{1,3}(?:[,. ]\d{3})+|\d+)(?:[,.]\d{1,2})?\)?"
     r"(?![A-Za-z0-9%])(?!(?:[.,]\d))",
     re.IGNORECASE,
@@ -100,7 +101,9 @@ def _label_amount(text: str, labels: str, *, allow_next_line: bool = True) -> st
     # monetary labels just because they begin with "Total" or "Tax".
     label_re = re.compile(
         rf"^\s*(?:{labels})\b\s*(?:\([^\n)]*%\))?\s*(?:[:#\-]\s*|\s+)"
-        rf"(?=[(BZ$€£\d-])((?:.*?))\s*$", re.I
+        rf"(?=(?:BZ\$|USD|BZD|EUR|GBP|CAD|AUD|NZD|MXN|JPY|CHF|INR|SGD|HKD|"
+        rf"BRL|COP|GTQ|HNL|CRC|PAB|DOP|JMD|TTD)\s*[(+-]?\d|[(€£$-]|\d)"
+        rf"((?:.*?))\s*$", re.I
     )
     lines = text.splitlines()
     for index, line in enumerate(lines):
