@@ -9,13 +9,16 @@ from app.main import app
 from app.security import create_api_key
 
 
-def _make_pdf(text="", page_size=(612, 792)):
+def _make_pdf(text="", page_size=(612, 792), pages=1):
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=page_size)
-    y = page_size[1] - 50
-    for line in text.splitlines():
-        pdf.drawString(50, y, line)
-        y -= 20
+    for page_index in range(pages):
+        y = page_size[1] - 50
+        for line in text.splitlines():
+            pdf.drawString(50, y, line)
+            y -= 20
+        if page_index < pages - 1:
+            pdf.showPage()
     pdf.save()
     return buffer.getvalue()
 
@@ -28,8 +31,8 @@ def client(tmp_path, monkeypatch):
         yield test_client
 
 
-def _auth_headers(label="api-test"):
-    key, _ = create_api_key(label, 100)
+def _auth_headers(label="api-test", monthly_limit=100):
+    key, _ = create_api_key(label, monthly_limit)
     return {"Authorization": f"Bearer {key}"}
 
 
@@ -145,7 +148,7 @@ def test_rejects_unsupported_file_extension(client):
 
 
 
-def test_failed_upload_attempt_is_metered(client):
+def test_failed_upload_attempt_is_rate_limited_but_not_billed(client):
     headers = _auth_headers("failed-upload-metering")
     response = client.post(
         "/v1/extract-file",
@@ -155,7 +158,10 @@ def test_failed_upload_attempt_is_metered(client):
     assert response.status_code == 415
     usage = client.get("/v1/usage", headers=headers)
     assert usage.status_code == 200
-    assert usage.json()["used"] == 1
+    assert usage.json()["used"] == 0
+    from app.security import requests_in_last_minute, get_key_record
+    key = headers["Authorization"].split(" ", 1)[1]
+    assert requests_in_last_minute(get_key_record(key)["id"]) == 1
 
 
 def test_oversized_pdf_page_is_rejected_before_rasterization(client, monkeypatch):
