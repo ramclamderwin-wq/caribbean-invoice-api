@@ -56,7 +56,7 @@ def hash_key(api_key: str) -> str:
 
 
 def create_api_key(label: str, monthly_limit: int | None = None) -> tuple[str, dict[str, Any]]:
-    raw_key = "iia_live_" + secrets.token_urlsafe(32)
+    raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
     limit = monthly_limit or DEFAULT_MONTHLY_LIMIT
     if limit < 1:
         raise ValueError("monthly_limit must be positive")
