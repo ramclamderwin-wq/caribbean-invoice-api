@@ -32,7 +32,10 @@ def init_db() -> None:
                 key_hash TEXT NOT NULL UNIQUE,
                 monthly_limit INTEGER NOT NULL,
                 active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                plan TEXT NOT NULL DEFAULT 'free',
+                stripe_customer_id TEXT,
+                subscription_id TEXT
             )
         """)
         conn.execute("""
@@ -43,7 +46,17 @@ def init_db() -> None:
                 FOREIGN KEY(api_key_id) REFERENCES api_keys(id)
             )
         """)
+        # Lightweight forward-only migration for databases created by earlier releases.
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(api_keys)").fetchall()}
+        for name, definition in {
+            "plan": "TEXT NOT NULL DEFAULT 'free'",
+            "stripe_customer_id": "TEXT",
+            "subscription_id": "TEXT",
+        }.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE api_keys ADD COLUMN {name} {definition}")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_usage_key_date ON api_usage(api_key_id, used_at)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_subscription ON api_keys(subscription_id) WHERE subscription_id IS NOT NULL")
 
 
 def hash_key(api_key: str) -> str:
@@ -68,7 +81,7 @@ def create_api_key(label: str, monthly_limit: int | None = None) -> tuple[str, d
 def get_key_record(api_key: str) -> dict[str, Any] | None:
     with _connect() as conn:
         row = conn.execute(
-            "SELECT id, label, monthly_limit, active FROM api_keys WHERE key_hash = ?",
+            "SELECT id, label, monthly_limit, active, plan, stripe_customer_id, subscription_id FROM api_keys WHERE key_hash = ?",
             (hash_key(api_key),),
         ).fetchone()
     return dict(row) if row else None
@@ -112,3 +125,32 @@ def requests_in_last_minute(key_id: int) -> int:
             (key_id, cutoff),
         ).fetchone()
     return int(row["used"])
+
+
+
+def set_subscription(
+    key_id: int,
+    plan: str,
+    status: str,
+    customer_id: str | None,
+    subscription_id: str,
+    monthly_limit: int,
+) -> None:
+    active = 1 if status in {"active", "trialing"} else 0
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE api_keys
+               SET plan = ?, active = ?, monthly_limit = ?,
+                   stripe_customer_id = ?, subscription_id = ?
+               WHERE id = ?""",
+            (plan, active, monthly_limit, customer_id, subscription_id, key_id),
+        )
+
+
+def set_subscription_by_id(subscription_id: str, status: str) -> None:
+    active = 1 if status in {"active", "trialing"} else 0
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE api_keys SET active = ? WHERE subscription_id = ?",
+            (active, subscription_id),
+        )
