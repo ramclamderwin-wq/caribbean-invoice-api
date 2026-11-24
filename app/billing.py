@@ -12,7 +12,7 @@ from app.security import (
     apply_stripe_subscription_event, checkout_key_delivery, mark_checkout_email_sent,
     provision_checkout_key, record_stripe_event, get_key_record_by_customer_id,
     create_recovery_code, prepare_recovery_key, mark_recovery_email_sent,
-    suspend_customer_access,
+    suspend_customer_access, claim_checkout_email_delivery, release_checkout_email_delivery,
 )
 from app.email_delivery import send_api_key_email, send_recovery_code_email
 
@@ -306,8 +306,14 @@ def _deliver_checkout_key(session: Any) -> str:
     if not delivery:
         raise RuntimeError("The provisioned API key could not be loaded for email delivery.")
     if not delivery["email_sent_at"]:
-        send_api_key_email(str(delivery["email"]), str(delivery["api_key"]))
-        mark_checkout_email_sent(session_id)
+        if not claim_checkout_email_delivery(session_id):
+            return "delivery_in_progress"
+        try:
+            send_api_key_email(str(delivery["email"]), str(delivery["api_key"]))
+            mark_checkout_email_sent(session_id)
+        except Exception:
+            release_checkout_email_delivery(session_id)
+            raise
     return "email_delivered"
 
 
