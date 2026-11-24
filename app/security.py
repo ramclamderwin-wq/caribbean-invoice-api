@@ -41,7 +41,7 @@ def init_db() -> None:
             active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
             plan TEXT NOT NULL DEFAULT 'free', stripe_customer_id TEXT,
             subscription_id TEXT, subscription_status TEXT NOT NULL DEFAULT 'active',
-            past_due_since TEXT)""")
+            past_due_since TEXT, current_period_start TEXT, current_period_end TEXT)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS api_usage (
             id INTEGER PRIMARY KEY AUTOINCREMENT, api_key_id INTEGER NOT NULL,
             used_at TEXT NOT NULL, FOREIGN KEY(api_key_id) REFERENCES api_keys(id))""")
@@ -52,6 +52,8 @@ def init_db() -> None:
             "subscription_id": "TEXT",
             "subscription_status": "TEXT NOT NULL DEFAULT 'active'",
             "past_due_since": "TEXT",
+            "current_period_start": "TEXT",
+            "current_period_end": "TEXT",
         }.items():
             if name not in columns:
                 conn.execute(f"ALTER TABLE api_keys ADD COLUMN {name} {definition}")
@@ -128,6 +130,7 @@ def _api_key_fernet() -> Fernet:
 def provision_checkout_key(
     session_id: str, email: str, plan: str, customer_id: str,
     subscription_id: str, monthly_limit: int, *, claim: bool = False,
+    current_period_start: str | None = None, current_period_end: str | None = None,
 ) -> str:
     """Create once and keep the raw key encrypted so webhook retries can deliver it."""
     fernet = _api_key_fernet()
@@ -160,8 +163,10 @@ def provision_checkout_key(
         encrypted = fernet.encrypt(raw_key.encode("utf-8")).decode("ascii")
         cursor = conn.execute(
             """INSERT INTO api_keys(label,key_hash,monthly_limit,active,created_at,plan,
-               stripe_customer_id,subscription_id) VALUES (?,?,?,?,?,?,?,?)""",
-            (email, hash_key(raw_key), monthly_limit, 1, now, plan, customer_id, subscription_id),
+               stripe_customer_id,subscription_id,current_period_start,current_period_end)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (email, hash_key(raw_key), monthly_limit, 1, now, plan, customer_id, subscription_id,
+             current_period_start, current_period_end),
         )
         conn.execute(
             """INSERT INTO checkout_claims(
@@ -212,11 +217,27 @@ def get_key_record(api_key: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def _usage_window(conn: sqlite3.Connection, key_id: int, now: datetime) -> tuple[str, str]:
+    row = conn.execute(
+        "SELECT current_period_start,current_period_end FROM api_keys WHERE id=?",
+        (key_id,),
+    ).fetchone()
+    if row and row["current_period_start"] and row["current_period_end"]:
+        return str(row["current_period_start"]), str(row["current_period_end"])
+    # Legacy/free keys retain a calendar-month window until assigned a Stripe period.
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    next_month = (start.replace(day=28) + timedelta(days=4)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return start.isoformat(), next_month.isoformat()
+
+
 def key_usage(key_id: int, monthly_limit: int) -> dict[str, int]:
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    now = datetime.now(timezone.utc)
     with _connect() as conn:
-        row = conn.execute("SELECT COUNT(*) AS used FROM api_usage WHERE api_key_id=? AND substr(used_at,1,7)=?",
-                           (key_id, month)).fetchone()
+        start, end = _usage_window(conn, key_id, now)
+        row = conn.execute(
+            "SELECT COUNT(*) AS used FROM api_usage WHERE api_key_id=? AND used_at>=? AND used_at<?",
+            (key_id, start, end),
+        ).fetchone()
     used = int(row["used"])
     return {"used": used, "monthly_limit": monthly_limit, "remaining": max(0, monthly_limit-used)}
 
@@ -225,13 +246,13 @@ def reserve_usage(key_id: int, monthly_limit: int, requests_per_minute: int) -> 
     """Atomically meter an attempt before expensive work, preventing quota races."""
     now = datetime.now(timezone.utc)
     now_text = now.isoformat()
-    month = now.strftime("%Y-%m")
     cutoff = (now - timedelta(seconds=60)).isoformat()
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        start, end = _usage_window(conn, key_id, now)
         used = conn.execute(
-            "SELECT COUNT(*) AS n FROM api_usage WHERE api_key_id=? AND substr(used_at,1,7)=?",
-            (key_id, month)).fetchone()["n"]
+            "SELECT COUNT(*) AS n FROM api_usage WHERE api_key_id=? AND used_at>=? AND used_at<?",
+            (key_id, start, end)).fetchone()["n"]
         if int(used) >= monthly_limit:
             raise UsageLimitExceeded("Monthly API usage limit reached.")
         recent = conn.execute(
@@ -422,15 +443,19 @@ def mark_recovery_email_sent(email: str, code: str) -> None:
 
 
 def set_subscription(key_id: int, plan: str, status: str, customer_id: str | None,
-                     subscription_id: str, monthly_limit: int) -> None:
+                     subscription_id: str, monthly_limit: int,
+                     current_period_start: str | None = None,
+                     current_period_end: str | None = None) -> None:
     active, past_due_since = _subscription_access_state(status)
     with _connect() as conn:
         conn.execute("""UPDATE api_keys SET plan=?,active=?,monthly_limit=?,stripe_customer_id=?,
                      subscription_id=?,subscription_status=?,
-                     past_due_since=CASE WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END
+                     past_due_since=CASE WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END,
+                     current_period_start=COALESCE(?,current_period_start),
+                     current_period_end=COALESCE(?,current_period_end)
                      WHERE id=?""",
                      (plan, active, monthly_limit, customer_id, subscription_id, status,
-                      status, past_due_since, key_id))
+                      status, past_due_since, current_period_start, current_period_end, key_id))
 
 
 def set_subscription_by_id(subscription_id: str, status: str,
@@ -448,6 +473,8 @@ def apply_stripe_subscription_event(
     event_id: str, event_created: int, event_type: str, subscription_id: str,
     status: str, plan: str | None = None, customer_id: str | None = None,
     monthly_limit: int | None = None,
+    current_period_start: str | None = None,
+    current_period_end: str | None = None,
 ) -> str:
     """Atomically deduplicate webhook events and ignore older subscription events."""
     active, past_due_since = _subscription_access_state(status)
@@ -469,9 +496,12 @@ def apply_stripe_subscription_event(
         conn.execute("""UPDATE api_keys SET active=?,subscription_status=?,
                      past_due_since=CASE WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END,
                      plan=COALESCE(?,plan),monthly_limit=COALESCE(?,monthly_limit),
-                     stripe_customer_id=COALESCE(?,stripe_customer_id)
+                     stripe_customer_id=COALESCE(?,stripe_customer_id),
+                     current_period_start=COALESCE(?,current_period_start),
+                     current_period_end=COALESCE(?,current_period_end)
                      WHERE subscription_id=?""",
-                     (active, status, status, past_due_since, plan, monthly_limit, customer_id, subscription_id))
+                     (active, status, status, past_due_since, plan, monthly_limit, customer_id,
+                      current_period_start, current_period_end, subscription_id))
         conn.execute("""INSERT INTO stripe_subscription_state(subscription_id,last_event_created)
                      VALUES (?,?) ON CONFLICT(subscription_id) DO UPDATE SET
                      last_event_created=MAX(last_event_created,excluded.last_event_created)""",
