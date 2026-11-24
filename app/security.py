@@ -296,7 +296,7 @@ def key_usage(key_id: int, monthly_limit: int) -> dict[str, int]:
             (key_id, start, end),
         ).fetchone()
     used = int(row["used"])
-    return {"used": used, "monthly_limit": monthly_limit, "remaining": max(0, monthly_limit-used)}
+    return {"used": used, "monthly_limit": monthly_limit, "remaining": max(0, monthly_limit-used), "unit": "pages"}
 
 
 def reserve_request_event(key_id: int, requests_per_minute: int) -> None:
