@@ -183,7 +183,7 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
 
     invoice_number = _first_match([
-        r"\b(?:invoice\s*(?:number|no\.?|#|num(?:ber)?)|inv\s*(?:no\.?|#)|n[uú]mero\s+de\s+factura)\s*[:#\-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"
+        r"\b(?:invoice\s*(?:number|no\.?|#|num(?:ber)?)|inv\s*(?:no\.?|#)|factura\s*(?:no\.?|#|n[uú]mero)|n[uú]mero\s+de\s+factura)\s*[:#\-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"
     ], text)
     invoice_date, date_label_found = _invoice_date(text)
     supplier = _supplier(lines)
