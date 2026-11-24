@@ -138,3 +138,33 @@ def test_rejects_unsupported_file_extension(client):
         files={"file": ("invoice.docx", b"content", "application/octet-stream")},
     )
     assert response.status_code == 415
+
+
+
+def test_failed_upload_attempt_is_metered(client):
+    headers = _auth_headers("failed-upload-metering")
+    response = client.post(
+        "/v1/extract-file",
+        headers=headers,
+        files={"file": ("invoice.docx", b"not supported", "application/octet-stream")},
+    )
+    assert response.status_code == 415
+    usage = client.get("/v1/usage", headers=headers)
+    assert usage.status_code == 200
+    assert usage.json()["used"] == 1
+
+
+def test_oversized_pdf_page_is_rejected_before_rasterization(client, monkeypatch):
+    import app.main as main
+
+    monkeypatch.setattr(main, "MAX_PDF_PAGE_PIXELS", 1_000_000)
+    document = fitz.open()
+    document.new_page(width=1000, height=1000)
+    payload = document.tobytes()
+    document.close()
+    response = client.post(
+        "/v1/extract-file",
+        headers=_auth_headers("oversized-page"),
+        files={"file": ("oversized.pdf", payload, "application/pdf")},
+    )
+    assert response.status_code == 413
