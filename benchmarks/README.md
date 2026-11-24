@@ -21,8 +21,7 @@ possible and store them locally in a private folder.
 3. Copy `benchmarks/benchmark_manifest.template.csv` into that private folder as
    `benchmark_manifest.csv`.
 4. Add one row per invoice. The `file` column is relative to the manifest file.
-5. Enter the correct values from the original invoice. Use ISO dates
-   (`YYYY-MM-DD`) and decimal amounts (for example `108.25`). Leave a cell blank
+5. Enter the correct values from the original invoice. Use ISO dates (`YYYY-MM-DD`) where possible; common named-month and unambiguous numeric dates are also normalized. Ambiguous numeric dates are not guessed. Use decimal amounts (for example `108.25`). Leave a cell blank
    only when the field is genuinely absent or cannot be established.
 
 The labelled fields are supplier name, invoice number, invoice date, currency,
@@ -30,11 +29,7 @@ subtotal, tax, and total.
 
 ## Run the benchmark
 
-Install the runner dependency if needed:
-
-```bash
-python -m pip install requests
-```
+The benchmark runner uses the `requests` dependency already declared in `requirements.txt`. If you installed the API dependencies, no extra package is needed.
 
 Set the API address and test key in your shell rather than writing secrets into a file:
 
