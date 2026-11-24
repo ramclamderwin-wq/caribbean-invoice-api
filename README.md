@@ -110,7 +110,7 @@ A test suite is included in `tests/`. Tests use synthetic invoices only; they do
 5. Verify the full Stripe Sandbox lifecycle and a staging Render deployment before public paid access.
 6. Add an optional AI extraction provider behind a configurable interface, with strict privacy controls and validation.
 
-Do not put API secrets or customer invoices in source control. Do not use extracted data to automatically pay or approve invoices.
+Valid invoice uploads are metered by page count; failed uploads are rate-limited but not billed. Do not put API secrets or customer invoices in source control. Do not use extracted data to automatically pay or approve invoices.
 
 
 ## API authentication and customer usage
@@ -126,7 +126,7 @@ Authorization: Bearer iia_live_your_key
 - `DELETE /v1/account` cancels non-terminal Stripe subscriptions for the authenticated customer, then deletes that customer's local API keys, usage, checkout-delivery records, and recovery codes. Stripe may retain payment/invoice records as legally required.
 - `POST /v1/admin/api-keys` creates a customer key. Protect this endpoint with the server-side `API_ADMIN_KEY` environment variable and the `X-Admin-Key` header.
 - Customer API keys are authenticated by SHA-256 hashes. A separately Fernet-encrypted copy is retained for webhook email retries and browser claim; keep API_KEY_ENCRYPTION_KEY secret and backed up. Email-based recovery verifies a one-time code and rotates the key.
-- `DEFAULT_MONTHLY_LIMIT` sets the default monthly request allowance (default 1,000).
+- `DEFAULT_MONTHLY_LIMIT` sets the default monthly page allowance (default 1,000).
 - `DATABASE_PATH` sets the SQLite database file location. Production deployments must use persistent storage and backups.
 
 Example: create a customer key (run only from a trusted administrator environment):
@@ -159,9 +159,9 @@ Stripe Checkout is designed for public customer signup. New customers do not nee
 Checkout is disabled unless the API-key encryption key and email provider are configured. The API key hash is used for authentication; a separately encrypted copy is retained so webhook retries can safely deliver the same key. Keep the encryption key backed up and secret. The browser claim is still one-time, and the session ID remains a bearer token.
 
 Planned subscription tiers (confirm the matching Stripe Sandbox products and prices before launch):
-- Starter: $19/month, 1,000 API requests.
-- Professional: $49/month, 5,000 API requests.
-- Business: $149/month, 20,000 API requests.
+- Starter: $19/month, 1,000 pages.
+- Professional: $49/month, 5,000 pages.
+- Business: $149/month, 20,000 pages.
 
 Required environment variables:
 - `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (keep these only in Render secret settings).
@@ -171,7 +171,7 @@ Required environment variables:
 - `RESEND_API_KEY` and `FROM_EMAIL`: a Resend API key and verified sender address.
 - `CHECKOUT_RATE_LIMIT` (default 5 requests/hour per client IP), `CLAIM_RATE_LIMIT` (default 10 requests/minute per client IP), and `PAYMENT_GRACE_HOURS` (default 72).
 - `RECOVERY_REQUEST_RATE_LIMIT` and `RECOVERY_CONFIRM_RATE_LIMIT` can override the default per-IP recovery throttles.
-- Optional quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
+- Optional page quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
 
 Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion/pause/resume, invoice payment failed/paid, `charge.refunded`, and `charge.dispute.created`/`updated`/`closed` events before testing subscription lifecycle. Refunds suspend access; partial refunds and disputes require manual review before access can be restored. Configure Resend with a verified sender domain before enabling Checkout. Checkout key email delivery depends on the webhook and will retry on email-provider failure. Stripe Tax remains disabled until the company determines its registration and collection obligations.
 
