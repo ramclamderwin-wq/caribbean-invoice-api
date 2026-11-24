@@ -2,5 +2,17 @@ services:
   - type: web
     name: invoice-intelligence-api
     runtime: docker
-    plan: free
+    plan: starter
     healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: invoice-api-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_PATH
+        value: /var/data/invoice_api.db
+      - key: API_ADMIN_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
