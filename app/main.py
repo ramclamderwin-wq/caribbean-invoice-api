@@ -220,7 +220,7 @@ def billing_claim(request: ClaimRequest, response: Response, http_request: Reque
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to verify checkout with Stripe.") from exc
-    return {"api_key": api_key, "warning": "Copy this API key now. It is displayed only once and cannot be recovered."}
+    return {"api_key": api_key, "warning": "Save this API key securely. If you lose it, use email verification to rotate and receive a replacement."}
 
 
 @app.post("/v1/keys/rotate")
