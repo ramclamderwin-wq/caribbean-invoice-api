@@ -149,14 +149,13 @@ The included Blueprint config uses a paid always-on service and a persistent dis
 Stripe Checkout is designed for public customer signup. New customers do not need an API key before choosing a plan.
 
 - `POST /v1/billing/checkout` — public endpoint accepting a plan and email, then returning a hosted Stripe Checkout URL.
-- `POST /v1/billing/claim` — accepts `{"session_id":"..."}` in a JSON body, verifies the completed subscription, and issues one API key once. The response is marked `no-store`; the session ID remains a bearer claim token and must not be shared.
-- `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an API key linked to a Stripe customer.
+- `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an active API key linked to a Stripe customer.
 - `POST /v1/billing/recovery/request` — sends a short-lived verification code to the email on an eligible Stripe customer account.
 - `POST /v1/billing/recovery/confirm` — verifies the one-time code, rotates the API key in place, and emails the replacement. If the email provider fails, retry with the same code to deliver the same encrypted pending key without rotating again.
 - `POST /v1/keys/rotate` and `POST /v1/keys/revoke` — rotate or revoke the currently authenticated key.
 - `POST /v1/billing/webhook` — verifies Stripe signatures, deduplicates events, ignores older subscription events, maps current Stripe Price IDs to plan quotas, applies a configurable payment-failure grace period, suspends access on refunds/disputes and paused subscriptions, and emails newly provisioned keys on successful checkout.
 
-Checkout is disabled unless the API-key encryption key and email provider are configured. The API key hash is used for authentication; a separately encrypted copy is retained so webhook retries can safely deliver the same key. Keep the encryption key backed up and secret. The browser claim is still one-time, and the session ID remains a bearer token.
+Checkout is disabled unless the API-key encryption key and email provider are configured. The signed Stripe webhook is the sole key-delivery path; the dashboard does not receive a Checkout session ID or claim token. The API key hash is used for authentication; a separately encrypted copy is retained so webhook retries can safely deliver the same key. Keep the encryption key backed up and secret.
 
 Planned subscription tiers (confirm the matching Stripe Sandbox products and prices before launch):
 - Starter: $19/month, 1,000 pages.
