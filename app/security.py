@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import secrets
 import sqlite3
@@ -82,6 +83,12 @@ def init_db() -> None:
         conn.execute("""CREATE TABLE IF NOT EXISTS public_rate_limit_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT, subject_hash TEXT NOT NULL,
             action TEXT NOT NULL, created_at REAL NOT NULL)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS api_key_recovery_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL,
+            customer_id TEXT NOT NULL, code_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0, used_at TEXT)""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_recovery_email ON api_key_recovery_codes(email,created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_public_rate_limits ON public_rate_limit_events(subject_hash,action,created_at)")
 
 
@@ -274,6 +281,65 @@ def _subscription_access_state(status: str) -> tuple[int, str | None]:
     if status == "past_due":
         return 1, now
     return 0, None
+
+
+def get_key_record_by_customer_id(customer_id: str) -> dict[str, Any] | None:
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT id,label,monthly_limit,active,plan,stripe_customer_id,
+               subscription_id,subscription_status,past_due_since
+               FROM api_keys WHERE stripe_customer_id=? ORDER BY id DESC LIMIT 1""",
+            (customer_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def _recovery_code_hash(code: str) -> str:
+    secret = os.getenv("API_KEY_ENCRYPTION_KEY")
+    if not secret:
+        raise RuntimeError("API_KEY_ENCRYPTION_KEY must be configured for account recovery.")
+    return hmac.new(secret.encode("utf-8"), code.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def create_recovery_code(email: str, customer_id: str, code: str) -> None:
+    now = datetime.now(timezone.utc)
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            "UPDATE api_key_recovery_codes SET used_at=? WHERE email=? AND used_at IS NULL",
+            (now.isoformat(), email.lower()),
+        )
+        conn.execute(
+            """INSERT INTO api_key_recovery_codes(
+               email,customer_id,code_hash,created_at,expires_at)
+               VALUES (?,?,?,?,?)""",
+            (
+                email.lower(), customer_id, _recovery_code_hash(code),
+                now.isoformat(), (now + timedelta(minutes=10)).isoformat(),
+            ),
+        )
+
+
+def consume_recovery_code(email: str, code: str) -> str | None:
+    now = datetime.now(timezone.utc)
+    supplied_hash = _recovery_code_hash(code)
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """SELECT id,customer_id,code_hash,expires_at,attempts,used_at
+               FROM api_key_recovery_codes WHERE email=? ORDER BY id DESC LIMIT 1""",
+            (email.lower(),),
+        ).fetchone()
+        if not row or row["used_at"] or int(row["attempts"]) >= 5:
+            return None
+        if datetime.fromisoformat(row["expires_at"]) < now:
+            conn.execute("UPDATE api_key_recovery_codes SET used_at=? WHERE id=?", (now.isoformat(), row["id"]))
+            return None
+        if not hmac.compare_digest(row["code_hash"], supplied_hash):
+            conn.execute("UPDATE api_key_recovery_codes SET attempts=attempts+1 WHERE id=?", (row["id"],))
+            return None
+        conn.execute("UPDATE api_key_recovery_codes SET used_at=? WHERE id=?", (now.isoformat(), row["id"]))
+        return str(row["customer_id"])
 
 
 def set_subscription(key_id: int, plan: str, status: str, customer_id: str | None,
