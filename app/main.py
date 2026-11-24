@@ -16,7 +16,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from app.security import create_api_key, get_key_record, init_db, key_usage, record_usage
+from app.security import create_api_key, get_key_record, init_db, key_usage, record_usage, requests_in_last_minute
 
 APP_NAME = "Invoice Intelligence API"
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
@@ -64,6 +64,9 @@ def require_api_key(authorization: str | None = Header(default=None)) -> dict[st
     usage = key_usage(record["id"], record["monthly_limit"])
     if usage["used"] >= usage["monthly_limit"]:
         raise HTTPException(status_code=429, detail="Monthly API usage limit reached.")
+    requests_per_minute = int(os.getenv("REQUESTS_PER_MINUTE", "60"))
+    if requests_in_last_minute(record["id"]) >= requests_per_minute:
+        raise HTTPException(status_code=429, detail="Per-minute API rate limit reached. Please retry shortly.")
     return record
 
 
