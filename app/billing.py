@@ -12,6 +12,7 @@ from app.security import (
     apply_stripe_subscription_event, checkout_key_delivery, mark_checkout_email_sent,
     provision_checkout_key, record_stripe_event, get_key_record_by_customer_id,
     create_recovery_code, prepare_recovery_key, mark_recovery_email_sent,
+    suspend_customer_access,
 )
 from app.email_delivery import send_api_key_email, send_recovery_code_email
 
@@ -192,7 +193,8 @@ def _subscription_plan(subscription: Any) -> str | None:
     }
     matched.discard(None)
     if len(matched) > 1:
-        raise ValueError("Stripe subscription contains multiple configured plan prices; refusing ambiguous entitlement.")
+        logger.error("Stripe subscription has multiple configured plan prices; retaining the existing entitlement.")
+        return None
     if len(matched) == 1:
         return next(iter(matched))
     metadata = subscription.get("metadata") or {}
@@ -222,6 +224,8 @@ def _apply_subscription_event(event: Any, event_type: str, subscription_id: str)
         else:
             raise
     status = str(current.get("status", event_obj.get("status", "canceled")))
+    if current.get("pause_collection"):
+        status = "paused"
     plan = _subscription_plan(current) or _subscription_plan(event_obj)
     customer_id = current.get("customer") or event_obj.get("customer")
     event_id = event.get("id")
@@ -275,6 +279,21 @@ def _deliver_checkout_key(session: Any) -> str:
     return "email_delivered"
 
 
+def _suspend_charge_customer(charge_or_dispute: Any, reason: str) -> int:
+    customer_id = charge_or_dispute.get("customer")
+    if not customer_id:
+        charge_id = charge_or_dispute.get("charge")
+        if isinstance(charge_id, dict):
+            customer_id = charge_id.get("customer")
+        elif charge_id:
+            charge = stripe.Charge.retrieve(str(charge_id))
+            customer_id = charge.get("customer")
+    if not customer_id:
+        logger.error("Cannot suspend access for %s event: Stripe customer ID is missing.", reason)
+        raise ValueError("Stripe billing event is missing the customer reference.")
+    return suspend_customer_access(str(customer_id), reason)
+
+
 def handle_webhook(payload: bytes, signature: str | None) -> dict[str, str]:
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
     if not webhook_secret:
@@ -309,6 +328,17 @@ def handle_webhook(payload: bytes, signature: str | None) -> dict[str, str]:
         if not subscription_id:
             raise ValueError("Stripe subscription event is missing its subscription ID.")
         outcome = _apply_subscription_event(event, event_type, subscription_id)
+    elif event_type == "charge.refunded":
+        amount = int(obj.get("amount") or 0)
+        refunded = int(obj.get("amount_refunded") or 0)
+        reason = "refunded" if amount > 0 and refunded >= amount else "refund_review"
+        changed = _suspend_charge_customer(obj, reason)
+        outcome = record_stripe_event(str(event_id), int(event.get("created") or 0), event_type)
+        logger.warning("Suspended %s API key(s) for Stripe refund event (%s).", changed, reason)
+    elif event_type in {"charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed"}:
+        changed = _suspend_charge_customer(obj, "disputed")
+        outcome = record_stripe_event(str(event_id), int(event.get("created") or 0), event_type)
+        logger.warning("Suspended %s API key(s) pending manual review of Stripe dispute.", changed)
     elif event_type in {"invoice.payment_failed", "invoice.paid"}:
         subscription_id = _invoice_subscription_id(obj)
         if subscription_id:
