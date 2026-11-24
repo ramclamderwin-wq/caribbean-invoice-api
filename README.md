@@ -151,7 +151,7 @@ Stripe Checkout is designed for public customer signup. New customers do not nee
 - `POST /v1/billing/claim` — accepts `{"session_id":"..."}` in a JSON body, verifies the completed subscription, and issues one API key once. The response is marked `no-store`; the session ID remains a bearer claim token and must not be shared.
 - `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an API key linked to a Stripe customer.
 - `POST /v1/billing/recovery/request` — sends a short-lived verification code to the email on an eligible Stripe customer account.
-- `POST /v1/billing/recovery/confirm` — verifies the one-time code, rotates the API key in place, and emails the replacement.
+- `POST /v1/billing/recovery/confirm` — verifies the one-time code, rotates the API key in place, and emails the replacement. If the email provider fails, retry with the same code to deliver the same encrypted pending key without rotating again.
 - `POST /v1/keys/rotate` and `POST /v1/keys/revoke` — rotate or revoke the currently authenticated key.
 - `POST /v1/billing/webhook` — verifies Stripe signatures, deduplicates events, ignores older subscription events, maps current Stripe Price IDs to plan quotas, applies a configurable payment-failure grace period, and emails newly provisioned keys on successful checkout.
 
