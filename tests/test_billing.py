@@ -275,8 +275,13 @@ def test_lost_key_recovery_uses_email_code_and_rotates_key(tmp_path, monkeypatch
             "/v1/billing/recovery/confirm",
             json={"email": "buyer@example.com", "code": codes[0][1]},
         )
+        reused = client.post(
+            "/v1/billing/recovery/confirm",
+            json={"email": "buyer@example.com", "code": codes[0][1]},
+        )
 
     assert confirmed.status_code == 200
+    assert reused.status_code == 400
     assert get_key_record(old_key) is None
     assert len(delivered_keys) == 1
     assert get_key_record(delivered_keys[0][1]) is not None
