@@ -175,3 +175,28 @@ def test_spanish_invoice_labels_are_supported():
     assert result["fields"]["invoice_date"] == "2026-11-20"
     assert result["fields"]["tax"] == "12.50"
     assert result["fields"]["total"] == "112.50"
+
+
+def test_total_tax_and_tax_id_are_not_misread_as_money():
+    result = extract_invoice_fields(
+        "Example Supplier\nInvoice No: A-90\nDate: 2026-04-03\n"
+        "Total Tax: 50.00\nTax ID: 12345\nSubtotal: 100.00\nTax: 8.00\nTotal: 108.00"
+    )
+    assert result["fields"]["total"] == "108.00"
+    assert result["fields"]["tax"] == "8.00"
+
+
+def test_trailing_punctuation_and_first_amount_are_handled():
+    result = extract_invoice_fields(
+        "Example Supplier\nInvoice No: A-91\nDate: 2026-04-03\n"
+        "Total: 108.00.\nPaid: 100.00"
+    )
+    assert result["fields"]["total"] == "108.00"
+
+
+def test_amount_attached_currency_beats_incidental_currency_note():
+    result = extract_invoice_fields(
+        "Example Supplier\nInvoice No: A-92\nDate: 2026-04-03\n"
+        "Prices in USD\nSubtotal: BZ$ 100.00\nTax: BZ$ 8.00\nTotal: BZ$ 108.00"
+    )
+    assert result["fields"]["currency"] == "BZD"
