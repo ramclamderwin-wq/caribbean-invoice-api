@@ -24,7 +24,11 @@ def test_public_checkout_does_not_require_an_api_key(monkeypatch):
     import app.billing as billing
     class FakeSession:
         url = "https://checkout.stripe.com/test-session"
-    monkeypatch.setattr(billing.stripe.checkout.Session, "create", lambda **kwargs: FakeSession())
+    from types import SimpleNamespace
+    fake_client = SimpleNamespace(v1=SimpleNamespace(checkout=SimpleNamespace(
+        sessions=SimpleNamespace(create=lambda params: FakeSession())
+    )))
+    monkeypatch.setattr(billing, "_configure", lambda: fake_client)
     with TestClient(app) as client:
         response = client.post("/v1/billing/checkout", json={"plan":"starter","email":"buyer@example.com"})
     assert response.status_code == 200
@@ -38,11 +42,16 @@ def test_checkout_key_is_created_once_and_linked_to_subscription(tmp_path, monke
     monkeypatch.setenv("STRIPE_SECRET_KEY","sk_test_example")
     from cryptography.fernet import Fernet
     monkeypatch.setenv("API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode())
-    monkeypatch.setattr(billing.stripe.checkout.Session,"retrieve",lambda session_id: {
+    from types import SimpleNamespace
+    fake_session = {
         "status":"complete","mode":"subscription","payment_status":"paid",
         "metadata":{"plan":"professional","signup_email":"buyer@example.com"},
-        "customer":"cus_test_1","subscription":"sub_test_1"})
-    monkeypatch.setattr(billing.stripe.Subscription,"retrieve",lambda sub_id: {"status":"active"})
+        "customer":"cus_test_1","subscription":"sub_test_1"}
+    fake_client = SimpleNamespace(v1=SimpleNamespace(
+        checkout=SimpleNamespace(sessions=SimpleNamespace(retrieve=lambda session_id: fake_session)),
+        subscriptions=SimpleNamespace(retrieve=lambda sub_id: {"status":"active"}),
+    ))
+    monkeypatch.setattr(billing, "_configure", lambda: fake_client)
     key=claim_checkout_key("cs_test_1")
     record=get_key_record(key)
     assert record["active"] == 1
@@ -100,14 +109,21 @@ def test_webhook_updates_plan_from_current_stripe_price_and_deduplicates(tmp_pat
         "data": {"object": {"id": "sub_webhook_1", "customer": "cus_test_123", "status": "active"}},
     }
     import app.billing as billing
-    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: event)
-    monkeypatch.setattr(billing.stripe.Subscription, "retrieve", lambda _id: {
+    from types import SimpleNamespace
+    fake_subscription = {
         "id": "sub_webhook_1",
         "customer": "cus_test_123",
         "status": "active",
         "metadata": {"plan": "starter"},
         "items": {"data": [{"price": {"id": "price_business_current"}}]},
-    })
+    }
+    fake_client = SimpleNamespace(
+        construct_event=lambda *args: event,
+        v1=SimpleNamespace(subscriptions=SimpleNamespace(
+            retrieve=lambda _id: fake_subscription
+        )),
+    )
+    monkeypatch.setattr(billing, "_configure", lambda: fake_client)
 
     first = handle_webhook(b"{}", "valid-signature")
     duplicate = handle_webhook(b"{}", "valid-signature")
