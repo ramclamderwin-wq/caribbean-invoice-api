@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet
 from app.security import (
     apply_stripe_subscription_event, checkout_key_delivery, mark_checkout_email_sent,
     provision_checkout_key, record_stripe_event, get_key_record_by_customer_id,
-    create_recovery_code, consume_recovery_code, rotate_api_key,
+    create_recovery_code, prepare_recovery_key, mark_recovery_email_sent, rotate_api_key,
 )
 from app.email_delivery import send_api_key_email, send_recovery_code_email
 
@@ -148,23 +148,42 @@ def request_api_key_recovery(email: str) -> None:
 
 def confirm_api_key_recovery(email: str, code: str) -> None:
     _configure()
-    customer_id = consume_recovery_code(email, code)
+    # Validate billing eligibility before consuming the one-time code or rotating credentials.
+    # The key rotation and encrypted pending-delivery record are committed atomically.
+    # If email delivery fails, the same code can retry delivery of the same key.
+    from app.security import prepare_recovery_key, mark_recovery_email_sent
+    from app.security import _recovery_code_hash
+    customer_id = None
+    # Resolve the matching customer from the latest recovery-code record only after
+    # checking eligible Stripe customers for this email.
+    try:
+        customers = stripe.Customer.list(email=email, limit=10)
+    except Exception as exc:
+        raise RuntimeError("Unable to verify the billing account for recovery.") from exc
+    for customer in customers.get("data", []):
+        candidate_id = str(customer.get("id") or "")
+        record = get_key_record_by_customer_id(candidate_id)
+        if not record or not record["active"] or not record.get("subscription_id"):
+            continue
+        subscription = stripe.Subscription.retrieve(record["subscription_id"])
+        status = str(subscription.get("status", "canceled"))
+        if status not in {"active", "trialing", "past_due"}:
+            continue
+        if status == "past_due" and record.get("past_due_since"):
+            started = datetime.fromisoformat(record["past_due_since"])
+            grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
+            if datetime.now(timezone.utc) - started > timedelta(hours=grace_hours):
+                continue
+        customer_id = candidate_id
+        break
     if not customer_id:
-        raise ValueError("The recovery code is invalid, expired, or already used.")
+        raise ValueError("The recovery code is invalid, expired, or the account is not eligible.")
     record = get_key_record_by_customer_id(customer_id)
-    if not record or not record["active"] or not record.get("subscription_id"):
-        raise ValueError("The account is not eligible for API key recovery.")
-    subscription = stripe.Subscription.retrieve(record["subscription_id"])
-    status = str(subscription.get("status", "canceled"))
-    if status not in {"active", "trialing", "past_due"}:
-        raise ValueError("The account is not eligible for API key recovery.")
-    if status == "past_due" and record.get("past_due_since"):
-        started = datetime.fromisoformat(record["past_due_since"])
-        grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
-        if datetime.now(timezone.utc) - started > timedelta(hours=grace_hours):
-            raise ValueError("The account is not eligible for API key recovery.")
-    new_key = rotate_api_key(record["id"])
+    new_key = prepare_recovery_key(email, code, customer_id, record["id"])
+    if not new_key:
+        raise ValueError("The recovery code is invalid, expired, or already used.")
     send_api_key_email(email, new_key)
+    mark_recovery_email_sent(email, code)
 
 
 def _subscription_plan(subscription: Any) -> str | None:
