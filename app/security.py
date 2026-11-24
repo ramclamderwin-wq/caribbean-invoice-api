@@ -299,6 +299,18 @@ def get_key_record_by_customer_id(customer_id: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def suspend_customer_access(customer_id: str, reason: str) -> int:
+    """Disable every API key tied to a Stripe customer pending billing review."""
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        cursor = conn.execute(
+            """UPDATE api_keys SET active=0,subscription_status=?,past_due_since=NULL
+               WHERE stripe_customer_id=?""",
+            (reason, customer_id),
+        )
+        return int(cursor.rowcount)
+
+
 def _recovery_code_hash(code: str) -> str:
     secret = os.getenv("API_KEY_ENCRYPTION_KEY")
     if not secret:
