@@ -437,6 +437,7 @@ def delete_customer_local_data(key_id: int) -> int:
             return 0
         placeholders = ",".join("?" for _ in key_ids)
         conn.execute(f"DELETE FROM api_usage WHERE api_key_id IN ({placeholders})", key_ids)
+        conn.execute(f"DELETE FROM api_request_events WHERE api_key_id IN ({placeholders})", key_ids)
         conn.execute(f"DELETE FROM checkout_claims WHERE api_key_id IN ({placeholders})", key_ids)
         cursor = conn.execute(f"DELETE FROM api_keys WHERE id IN ({placeholders})", key_ids)
         return int(cursor.rowcount)
