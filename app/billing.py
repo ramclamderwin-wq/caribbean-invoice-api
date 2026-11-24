@@ -48,7 +48,7 @@ def claim_checkout_key(session_id: str) -> str:
         raise ValueError("Payment has not been confirmed yet.")
     metadata = session.get("metadata") or {}
     plan = metadata.get("plan")
-    email = session.get("customer_details", {}).get("email") or session.get("customer_email") or metadata.get("signup_email")
+    email = (session.get("customer_details") or {}).get("email") or session.get("customer_email") or metadata.get("signup_email")
     customer_id = session.get("customer")
     subscription_id = session.get("subscription")
     if plan not in PLAN_PRICE_ENV or not email or not customer_id or not subscription_id:
