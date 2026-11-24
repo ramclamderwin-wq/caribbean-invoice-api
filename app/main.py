@@ -54,6 +54,69 @@ app = FastAPI(
     description="Quillvora extracts structured invoice data from text, PDFs, scanned PDFs, and invoice photos. Verify every result against the original.",
     version="0.3.0",
 )
+class UploadBodySizeLimitMiddleware:
+    """Reject oversized upload bodies before multipart parsing can spool them."""
+    def __init__(self, application, max_bytes: int):
+        self.application = application
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("path") not in {"/v1/extract-file", "/v1/extract-pdf"}:
+            await self.application(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        content_length = headers.get(b"content-length")
+        if content_length:
+            try:
+                if int(content_length) > self.max_bytes:
+                    await self._reject(send)
+                    return
+            except ValueError:
+                await self._reject(send)
+                return
+
+        total = 0
+        oversized = False
+
+        async def limited_receive():
+            nonlocal total, oversized
+            if oversized:
+                return {"type": "http.request", "body": b"", "more_body": False}
+            message = await receive()
+            if message["type"] == "http.request":
+                total += len(message.get("body", b""))
+                if total > self.max_bytes:
+                    oversized = True
+                    return {"type": "http.request", "body": b"", "more_body": False}
+            return message
+
+        async def guarded_send(message):
+            if not oversized:
+                await send(message)
+
+        await self.application(scope, limited_receive, guarded_send)
+        if oversized:
+            await self._reject(send)
+
+    async def _reject(self, send):
+        body = b'{"detail":"Upload request body exceeds the configured size limit."}'
+        await send({
+            "type": "http.response.start",
+            "status": 413,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode("ascii")),
+                (b"cache-control", b"no-store"),
+            ],
+        })
+        await send({"type": "http.response.body", "body": body})
+
+
+app.add_middleware(
+    UploadBodySizeLimitMiddleware,
+    max_bytes=MAX_UPLOAD_BYTES + 128 * 1024,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "").split(","),
