@@ -11,28 +11,8 @@ RUN apt-get update \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN python - <<'PY'
-from importlib.metadata import distribution
-from pathlib import Path
-import shutil
-
-dist = distribution("pypdfium2")
-files = list(dist.files or [])
-license_files = [
-    item for item in files
-    if ".dist-info/licenses/" in str(item).replace("\\", "/")
-]
-if not any("BUILD_LICENSES" in str(item) for item in license_files):
-    raise SystemExit("pypdfium2 wheel did not expose PDFium BUILD_LICENSES; refusing to build an unnoted image")
-target = Path("/app/THIRD_PARTY_LICENSES/pypdfium2")
-for item in license_files:
-    source = Path(dist.locate_file(item))
-    if source.is_file():
-        relative = Path(str(item).split(".dist-info/licenses/", 1)[1])
-        destination = target / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-PY
+COPY scripts/copy_pdfium_licenses.py /tmp/copy_pdfium_licenses.py
+RUN python /tmp/copy_pdfium_licenses.py && rm /tmp/copy_pdfium_licenses.py
 
 COPY app ./app
 COPY THIRD_PARTY_NOTICES.md .
