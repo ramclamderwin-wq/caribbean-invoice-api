@@ -8,7 +8,7 @@ A global invoice extraction API from Quillvora, built for businesses and develop
 
 - Extract supplier, invoice number, date, currency, subtotal, tax, and total.
 - Accept PDF, PNG, JPG/JPEG, WEBP, TIFF, and BMP uploads.
-- OCR scanned PDFs and phone photos with Tesseract.
+- OCR scanned PDFs and phone photos with Tesseract (English and Spanish language data in the Docker image).
 - Detect ISO currency codes explicitly printed on an invoice, including USD and BZD; otherwise currency remains unknown.
 - Return warnings when required fields are missing or subtotal plus tax does not match the total.
 - Enforce upload-size and PDF-page limits.
@@ -63,15 +63,15 @@ curl -X POST http://127.0.0.1:8000/v1/extract-file \
   -F "file=@invoice-scan.pdf"
 ```
 
-The response contains `fields`, `confidence`, `confidence_type`, `warnings`, `review_required`, `extraction_metadata`, and `source` metadata. The confidence values are deliberately labeled heuristic presence indicators, not statistically calibrated probabilities or accuracy guarantees. Every invoice result requires review against the source document.
+The response contains `fields`, `confidence`, `confidence_type`, `warnings`, `review_required`, `extraction_metadata`, and `source` metadata. Confidence is currently unavailable (`null`) because no statistically calibrated confidence model exists. Every invoice result requires review against the source document.
 
 ## Configuration
 
 - `MAX_UPLOAD_BYTES`: maximum upload size (default 15 MiB).
 - `MAX_PDF_PAGES`: maximum PDF pages (default 20).
-- `MAX_IMAGE_PIXELS`: maximum image pixels (default 25 million).
+- `MAX_IMAGE_PIXELS`: maximum image pixels (default 25 million).\n- `MAX_PDF_PAGE_PIXELS`: maximum rendered pixels per scanned PDF page (default 16 million).\n- `MAX_OCR_PAGES`: maximum pages requiring OCR in one PDF (default 5).\n- `OCR_TIMEOUT_SECONDS`: timeout per OCR page/image (default 30 seconds).\n- `OCR_LANGUAGES`: Tesseract language codes (default `eng+spa`).\n- `MAX_CONCURRENT_FILE_JOBS`: maximum simultaneous file decode/OCR jobs (default 1).
 - `TESSERACT_CMD`: optional absolute path to the Tesseract executable.
-- `CORS_ORIGINS`: comma-separated allowed origins. Set explicit production origins before connecting a browser frontend.
+- `CORS_ORIGINS`: comma-separated allowed origins. Cross-origin access is disabled by default; set only the exact production frontend origins if needed.
 
 ## Deploy with Docker
 
@@ -142,7 +142,7 @@ Stripe Checkout is designed for public customer signup. New customers do not nee
 - `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an API key linked to a Stripe customer.
 - `POST /v1/billing/webhook` — verifies Stripe signatures and updates linked API-key access when a subscription changes or payment fails.
 
-The dashboard at `/dashboard` contains plan selection and a one-time API-key claim screen. For now, the key is displayed on the post-checkout page; an email delivery provider has not yet been configured. Customers must copy and securely save the key when it appears.
+The dashboard at `/dashboard` contains plan selection and a one-time API-key claim screen. Email delivery and lost-key recovery are not yet implemented, so customers must complete the claim and securely save the key. This browser-dependent delivery path remains a blocker for public paid launch.
 
 Planned subscription tiers (confirm the matching Stripe Sandbox products and prices before launch):
 - Starter: $19/month, 1,000 API requests.
@@ -155,6 +155,11 @@ Required environment variables:
 - `CHECKOUT_SUCCESS_URL`, `CHECKOUT_CANCEL_URL`, `CUSTOMER_PORTAL_RETURN_URL`.
 - Optional quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
 
-Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion and invoice payment failure events before testing subscription lifecycle. Stripe Tax remains disabled until the company determines its registration and collection obligations.
+Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion/pause/resume and invoice payment failure/paid events before testing subscription lifecycle. Webhook event IDs are deduplicated, older subscription events are ignored, plan limits are mapped from the current Stripe Price ID, and payment failures receive a configurable 72-hour grace period. Checkout-completed webhook key delivery is not yet implemented. Stripe Tax remains disabled until the company determines its registration and collection obligations.
 
 The customer self-signup code is under test and must pass CI and be deployed/configured before it is advertised as a working public service.
+
+
+## PDF dependency and licensing note
+
+The runtime uses pypdfium2/PDFium for PDF text extraction and rendering instead of PyMuPDF. Review `THIRD_PARTY_NOTICES.md` and retain the upstream PDFium bundled license notices in any distributed container image. Legal review of the exact binary build is still required.
