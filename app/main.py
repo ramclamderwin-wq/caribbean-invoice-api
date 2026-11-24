@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import io
 import os
+from contextlib import asynccontextmanager
 import re
 import shutil
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-import fitz
+import pymupdf as fitz
 import pytesseract
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,8 +27,15 @@ TESSERACT_CMD = os.getenv("TESSERACT_CMD")
 if TESSERACT_CMD:
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
 
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    init_db()
+    yield
+
+
 app = FastAPI(
     title=APP_NAME,
+    lifespan=lifespan,
     description="Extract structured invoice data from text, PDFs, scanned PDFs, and invoice photos. Verify every result against the original.",
     version="0.2.0",
 )
@@ -47,11 +55,6 @@ class TextRequest(BaseModel):
 class CreateKeyRequest(BaseModel):
     label: str = Field(min_length=2, max_length=100)
     monthly_limit: int = Field(default=1000, ge=1, le=1_000_000)
-
-
-@app.on_event("startup")
-def startup() -> None:
-    init_db()
 
 
 def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
