@@ -88,3 +88,32 @@ def test_confidence_is_not_presented_as_probability():
     assert result["confidence_type"] == "heuristic_presence_indicator_not_probability"
     assert set(result["confidence"]) == set(result["fields"])
     assert all(0 <= score <= 1 for score in result["confidence"].values())
+
+
+
+@pytest.mark.parametrize("case", range(50))
+def test_fifty_synthetic_invoice_variations(case):
+    suppliers = [f"Supplier {case:02d} LLC", f"Global Trade {case:02d}", f"Northwind Parts {case:02d}"]
+    number_labels = ["Invoice No", "Invoice #", "Invoice Number", "Inv #"]
+    date_labels = ["Date", "Invoice Date"]
+    total_labels = ["Grand Total", "Total Due", "Amount Due", "Total"]
+    currencies = ["USD", "BZD", "EUR", "GBP", "CAD"]
+    total = Decimal("100.00") + Decimal(case)
+    tax = Decimal("8.00")
+    subtotal = total - tax
+    supplier = suppliers[case % len(suppliers)]
+    text = (
+        f"{supplier}\n"
+        f"{number_labels[case % len(number_labels)]}: INV-{case:04d}\n"
+        f"{date_labels[case % len(date_labels)]}: 2026-11-{(case % 28) + 1:02d}\n"
+        f"Currency: {currencies[case % len(currencies)]}\n"
+        f"Subtotal: {subtotal:.2f}\n"
+        f"Tax: {tax:.2f}\n"
+        f"{total_labels[case % len(total_labels)]}: {total:.2f}"
+    )
+    result = extract_invoice_fields(text)
+    assert result["fields"]["supplier_name"] == supplier
+    assert result["fields"]["invoice_number"] == f"INV-{case:04d}"
+    assert result["fields"]["total"] == f"{total:.2f}"
+    assert result["fields"]["currency"] == currencies[case % len(currencies)]
+    assert not result["warnings"]
