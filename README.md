@@ -145,9 +145,12 @@ Stripe Checkout is designed for public customer signup. New customers do not nee
 - `POST /v1/billing/checkout` — public endpoint accepting a plan and email, then returning a hosted Stripe Checkout URL.
 - `POST /v1/billing/claim` — accepts `{"session_id":"..."}` in a JSON body, verifies the completed subscription, and issues one API key once. The response is marked `no-store`; the session ID remains a bearer claim token and must not be shared.
 - `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an API key linked to a Stripe customer.
-- `POST /v1/billing/webhook` — verifies Stripe signatures, deduplicates events, ignores older subscription events, maps current Stripe Price IDs to plan quotas, and applies a configurable payment-failure grace period.
+- `POST /v1/billing/recovery/request` — sends a short-lived verification code to the email on an eligible Stripe customer account.
+- `POST /v1/billing/recovery/confirm` — verifies the one-time code, rotates the API key in place, and emails the replacement.
+- `POST /v1/keys/rotate` and `POST /v1/keys/revoke` — rotate or revoke the currently authenticated key.
+- `POST /v1/billing/webhook` — verifies Stripe signatures, deduplicates events, ignores older subscription events, maps current Stripe Price IDs to plan quotas, applies a configurable payment-failure grace period, and emails newly provisioned keys on successful checkout.
 
-The dashboard at `/dashboard` contains plan selection and a one-time API-key claim screen. Email delivery and lost-key recovery are not yet implemented, so customers must complete the browser claim and securely save the key. This remains a blocker for public paid launch.
+Checkout is disabled unless the API-key encryption key and email provider are configured. The API key hash is used for authentication; a separately encrypted copy is retained so webhook retries can safely deliver the same key. Keep the encryption key backed up and secret. The browser claim is still one-time, and the session ID remains a bearer token.
 
 Planned subscription tiers (confirm the matching Stripe Sandbox products and prices before launch):
 - Starter: $19/month, 1,000 API requests.
@@ -158,9 +161,12 @@ Required environment variables:
 - `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (keep these only in Render secret settings).
 - `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PROFESSIONAL`, `STRIPE_PRICE_BUSINESS`.
 - `CHECKOUT_SUCCESS_URL`, `CHECKOUT_CANCEL_URL`, `CUSTOMER_PORTAL_RETURN_URL`.
+- `API_KEY_ENCRYPTION_KEY`: a Fernet key. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`; store only in Render secret settings and keep a secure backup.
+- `RESEND_API_KEY` and `FROM_EMAIL`: a Resend API key and verified sender address.
 - `CHECKOUT_RATE_LIMIT` (default 5 requests/hour per client IP), `CLAIM_RATE_LIMIT` (default 10 requests/minute per client IP), and `PAYMENT_GRACE_HOURS` (default 72).
+- `RECOVERY_REQUEST_RATE_LIMIT` and `RECOVERY_CONFIRM_RATE_LIMIT` can override the default per-IP recovery throttles.
 - Optional quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
 
-Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion/pause/resume and invoice payment failed/paid events before testing subscription lifecycle. Checkout-completed key delivery by webhook is not implemented yet. Stripe Tax remains disabled until the company determines its registration and collection obligations.
+Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion/pause/resume and invoice payment failed/paid events before testing subscription lifecycle. Configure Resend with a verified sender domain before enabling Checkout. Checkout key email delivery depends on the webhook and will retry on email-provider failure. Stripe Tax remains disabled until the company determines its registration and collection obligations.
 
 The customer self-signup code is under test and must pass CI and be deployed/configured before it is advertised as a working public service.
