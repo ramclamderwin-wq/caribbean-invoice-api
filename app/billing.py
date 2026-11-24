@@ -89,7 +89,7 @@ def create_checkout_session(plan: str, email: str) -> str:
         mode="subscription",
         customer_email=email,
         line_items=[{"price": price_id, "quantity": 1}],
-        success_url=success_url + ("&" if "?" in success_url else "?") + "session_id={CHECKOUT_SESSION_ID}",
+        success_url=success_url,
         cancel_url=cancel_url,
         metadata={"plan": plan, "signup_email": email},
         subscription_data={"metadata": {"plan": plan, "signup_email": email}},
