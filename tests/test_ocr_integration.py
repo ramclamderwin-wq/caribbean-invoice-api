@@ -1,7 +1,8 @@
 import io
 import shutil
 
-import pymupdf
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 import pytest
 from PIL import Image, ImageDraw, ImageFont
 
@@ -55,11 +56,11 @@ def test_tesseract_reads_scanned_pdf():
     image_bytes = io.BytesIO()
     image.save(image_bytes, format="PNG")
 
-    document = pymupdf.open()
-    page = document.new_page(width=900, height=550)
-    page.insert_image(page.rect, stream=image_bytes.getvalue())
-    pdf_bytes = document.tobytes()
-    document.close()
+    pdf_buffer = io.BytesIO()
+    pdf = canvas.Canvas(pdf_buffer, pagesize=(900, 550))
+    pdf.drawImage(ImageReader(io.BytesIO(image_bytes.getvalue())), 0, 0, width=900, height=550)
+    pdf.save()
+    pdf_bytes = pdf_buffer.getvalue()
 
     text, ocr_used, page_count = _extract_pdf(pdf_bytes)
     result = extract_invoice_fields(text)
