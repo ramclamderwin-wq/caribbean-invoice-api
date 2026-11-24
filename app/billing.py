@@ -44,6 +44,10 @@ def _monthly_limit(plan: str) -> int:
 def _stripe_period_value(subscription: Any, field: str) -> str | None:
     value = subscription.get(field)
     if value is None:
+        # Newer Stripe API versions may expose billing periods on subscription items.
+        items = (subscription.get("items") or {}).get("data") or []
+        value = next((item.get(field) for item in items if item.get(field) is not None), None)
+    if value is None:
         return None
     try:
         return datetime.fromtimestamp(int(value), timezone.utc).isoformat()
