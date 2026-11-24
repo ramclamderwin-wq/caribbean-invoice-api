@@ -121,6 +121,21 @@ def _normalise_date(raw: str | None) -> str | None:
             return datetime.strptime(value, fmt).date().isoformat()
         except ValueError:
             pass
+    spanish = re.fullmatch(r"(\d{1,2})\s+de\s+([A-Za-záéíóúñ]+)\s+de\s+(\d{4})", value, re.I)
+    if spanish:
+        day, month_name, year = spanish.groups()
+        spanish_months = {
+            "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+            "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+            "septiembre": 9, "setiembre": 9, "octubre": 10,
+            "noviembre": 11, "diciembre": 12,
+        }
+        month = spanish_months.get(month_name.lower())
+        if month:
+            try:
+                return date(int(year), month, int(day)).isoformat()
+            except ValueError:
+                return None
     numeric = re.fullmatch(r"(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})", value)
     if numeric:
         first, second, year = map(int, numeric.groups())
