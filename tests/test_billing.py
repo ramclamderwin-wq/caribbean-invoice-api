@@ -144,3 +144,31 @@ def test_failed_payment_webhook_keeps_access_during_grace_period(tmp_path, monke
     assert updated["active"] == 1
     assert updated["subscription_status"] == "past_due"
     assert updated["past_due_since"] is not None
+
+
+
+def test_claim_endpoint_uses_post_and_no_store_headers(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "claim-endpoint.db"))
+    import app.main as main
+    monkeypatch.setattr(main, "claim_checkout_key", lambda _session_id: "iia_test_example")
+    with TestClient(app) as client:
+        response = client.post("/v1/billing/claim", json={"session_id": "cs_test_session_123"})
+        assert response.status_code == 200
+        assert response.json()["api_key"] == "iia_test_example"
+        assert response.headers["cache-control"].startswith("no-store")
+        assert client.get("/v1/billing/claim?session_id=cs_test_session_123").status_code == 405
+
+
+def test_api_key_rotation_endpoint_returns_new_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "key-rotation-endpoint.db"))
+    raw_key, _ = create_api_key("rotation endpoint", 10)
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/keys/rotate",
+            headers={"Authorization": f"Bearer {raw_key}"},
+        )
+    assert response.status_code == 200
+    new_key = response.json()["api_key"]
+    assert new_key != raw_key
+    assert get_key_record(raw_key) is None
+    assert get_key_record(new_key) is not None
