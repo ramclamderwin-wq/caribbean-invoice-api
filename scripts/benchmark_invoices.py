@@ -18,6 +18,7 @@ import sys
 import time
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -64,8 +65,31 @@ def normalise(field: str, value: Any) -> str:
     if field == "currency":
         return value.upper().replace("$", "").strip()
     if field == "invoice_date":
-        # API dates are ISO-8601. Ground truth should preferably use YYYY-MM-DD.
-        return value.strip()
+        # Accept named-month dates and unambiguous numeric dates. Never guess
+        # day/month ordering for values such as 01/02/2026.
+        cleaned = value.replace(",", "").strip()
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d %b %Y", "%d %B %Y",
+                    "%b %d %Y", "%B %d %Y"):
+            try:
+                return datetime.strptime(cleaned, fmt).date().isoformat()
+            except ValueError:
+                pass
+        numeric = re.fullmatch(r"(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})", cleaned)
+        if numeric:
+            first, second, year = map(int, numeric.groups())
+            if year < 100:
+                year += 2000 if year < 70 else 1900
+            if first > 12 >= second:
+                day, month = first, second
+            elif second > 12 >= first:
+                month, day = first, second
+            else:
+                return ""
+            try:
+                return datetime(year, month, day).date().isoformat()
+            except ValueError:
+                return ""
+        return ""
     return re.sub(r"\s+", " ", value).casefold()
 
 
@@ -118,7 +142,12 @@ def main() -> int:
                 result["http_status"] = response.status_code
                 response.raise_for_status()
                 payload = response.json()
-                extracted = payload.get("fields", {})
+                extracted = payload.get("fields")
+                if not isinstance(extracted, dict):
+                    raise ValueError(
+                        "API response did not contain the expected object at 'fields'. "
+                        "Check the staging API version and response schema."
+                    )
                 for field in FIELDS:
                     expected = normalise(field, record.get(field))
                     actual = normalise(field, extracted.get(field))
