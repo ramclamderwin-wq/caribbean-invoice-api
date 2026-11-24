@@ -49,6 +49,8 @@ def _within_payment_grace(record: dict[str, Any]) -> bool:
         past_due_at = datetime.fromisoformat(started)
     except (TypeError, ValueError):
         return False
+    if past_due_at.tzinfo is None:
+        past_due_at = past_due_at.replace(tzinfo=timezone.utc)
     grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
     return datetime.now(timezone.utc) - past_due_at <= timedelta(hours=grace_hours)
 
