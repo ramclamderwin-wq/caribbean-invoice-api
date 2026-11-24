@@ -1,12 +1,23 @@
 import io
 
-import pymupdf as fitz
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from reportlab.pdfgen import canvas
 
 from app.main import app
 from app.security import create_api_key
+
+
+def _make_pdf(text="", page_size=(612, 792)):
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=page_size)
+    y = page_size[1] - 50
+    for line in text.splitlines():
+        pdf.drawString(50, y, line)
+        y -= 20
+    pdf.save()
+    return buffer.getvalue()
 
 
 @pytest.fixture
@@ -68,20 +79,13 @@ def test_usage_counts_successful_extraction(client):
 
 
 def test_extract_text_based_pdf_upload(client):
-    document = fitz.open()
-    page = document.new_page()
-    page.insert_textbox(
-        fitz.Rect(50, 50, 550, 300),
-        """ACME SUPPLIES LLC
+    payload = _make_pdf("""ACME SUPPLIES LLC
 Invoice No: PDF-10
 Date: 2026-11-20
 Currency: USD
 Subtotal: 50.00
 Tax: 4.00
-Total: 54.00""",
-    )
-    payload = document.tobytes()
-    document.close()
+Total: 54.00""")
     response = client.post(
         "/v1/extract-file",
         headers=_auth_headers("pdf-test"),
@@ -158,10 +162,7 @@ def test_oversized_pdf_page_is_rejected_before_rasterization(client, monkeypatch
     import app.main as main
 
     monkeypatch.setattr(main, "MAX_PDF_PAGE_PIXELS", 1_000_000)
-    document = fitz.open()
-    document.new_page(width=1000, height=1000)
-    payload = document.tobytes()
-    document.close()
+    payload = _make_pdf(page_size=(1000, 1000))
     response = client.post(
         "/v1/extract-file",
         headers=_auth_headers("oversized-page"),
