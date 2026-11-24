@@ -13,19 +13,19 @@ services:
       - key: DATABASE_PATH
         value: /var/data/invoice_api.db
       - key: API_ADMIN_KEY
-        sync: false
+        generateValue: true
       - key: CORS_ORIGINS
-        sync: false
+        value: "*"
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: STRIPE_PRICE_STARTER
-        sync: false
+        value: price_1UfA89KqMzLsvG4ZAFDh3MJU
       - key: STRIPE_PRICE_PROFESSIONAL
-        sync: false
+        value: price_1UfA8MKqMzLsvG4Zhn16WocE
       - key: STRIPE_PRICE_BUSINESS
-        sync: false
+        value: price_1UfA8OKqMzLsvG4ZAM90zuJE
       - key: CHECKOUT_SUCCESS_URL
         sync: false
       - key: CHECKOUT_CANCEL_URL
