@@ -344,3 +344,25 @@ def test_checkout_webhook_retries_email_with_same_key(tmp_path, monkeypatch):
     assert len(calls) == 2
     assert calls[0] == calls[1] == delivery["api_key"]
     assert delivery["email_sent_at"] is not None
+
+
+def test_subscription_plan_checks_all_items_and_rejects_multiple_configured_plans(monkeypatch):
+    from app.billing import _subscription_plan
+
+    monkeypatch.setenv("STRIPE_PRICE_STARTER", "price_starter")
+    monkeypatch.setenv("STRIPE_PRICE_PROFESSIONAL", "price_professional")
+    monkeypatch.setenv("STRIPE_PRICE_BUSINESS", "price_business")
+    assert _subscription_plan({
+        "metadata": {"plan": "starter"},
+        "items": {"data": [
+            {"price": {"id": "price_addon"}},
+            {"price": {"id": "price_professional"}},
+        ]},
+    }) == "professional"
+    with pytest.raises(ValueError, match="multiple configured plan prices"):
+        _subscription_plan({
+            "items": {"data": [
+                {"price": {"id": "price_starter"}},
+                {"price": {"id": "price_professional"}},
+            ]},
+        })
