@@ -5,8 +5,10 @@ from typing import Any
 
 import stripe
 from app.security import (
-    apply_stripe_subscription_event, provision_checkout_key, record_stripe_event,
+    apply_stripe_subscription_event, checkout_key_delivery, mark_checkout_email_sent,
+    provision_checkout_key, record_stripe_event,
 )
+from app.email_delivery import send_api_key_email
 
 PLAN_PRICE_ENV = {
     "starter": "STRIPE_PRICE_STARTER",
@@ -34,6 +36,8 @@ def _monthly_limit(plan: str) -> int:
 
 def create_checkout_session(plan: str, email: str) -> str:
     _configure()
+    if not all(os.getenv(name) for name in ("API_KEY_ENCRYPTION_KEY", "RESEND_API_KEY", "FROM_EMAIL")):
+        raise RuntimeError("Secure API-key encryption and email delivery must be configured before accepting paid signups.")
     price_id = os.getenv(PLAN_PRICE_ENV[plan])
     if not price_id:
         raise RuntimeError(f"The Stripe price for {plan} is not configured.")
@@ -76,12 +80,10 @@ def claim_checkout_key(session_id: str) -> str:
     status = str(subscription.get("status", "incomplete"))
     if status not in {"active", "trialing"}:
         raise ValueError("The subscription is not active. Please contact support.")
-    raw_key = provision_checkout_key(
-        session_id, email, plan, str(customer_id), str(subscription_id), _monthly_limit(plan)
+    return provision_checkout_key(
+        session_id, email, plan, str(customer_id), str(subscription_id),
+        _monthly_limit(plan), claim=True,
     )
-    if not raw_key:
-        raise ValueError("This checkout session's API key has already been claimed. Contact support for recovery.")
-    return raw_key
 
 
 def create_portal_session(key_record: dict[str, Any]) -> str:
@@ -154,6 +156,42 @@ def _apply_subscription_event(event: Any, event_type: str, subscription_id: str)
     )
 
 
+def _deliver_checkout_key(session: Any) -> str:
+    if session.get("status") != "complete" or session.get("mode") != "subscription":
+        return "not_complete"
+    if session.get("payment_status") not in {"paid", "no_payment_required"}:
+        return "payment_pending"
+    metadata = session.get("metadata") or {}
+    session_id = str(session.get("id") or "")
+    subscription_id = session.get("subscription")
+    customer_id = session.get("customer")
+    email = (
+        (session.get("customer_details") or {}).get("email")
+        or session.get("customer_email")
+        or metadata.get("signup_email")
+    )
+    if not session_id or not subscription_id or not customer_id or not email:
+        raise ValueError("Completed Checkout session is missing customer or subscription details.")
+    current = stripe.Subscription.retrieve(str(subscription_id))
+    status = str(current.get("status", "incomplete"))
+    if status not in {"active", "trialing"}:
+        raise RuntimeError("The Stripe subscription is not active yet; key delivery will retry.")
+    plan = _subscription_plan(current) or metadata.get("plan")
+    if plan not in PLAN_PRICE_ENV:
+        raise ValueError("Unable to map the completed Checkout subscription to a configured plan.")
+    provision_checkout_key(
+        session_id, str(email), plan, str(customer_id), str(subscription_id),
+        _monthly_limit(plan), claim=False,
+    )
+    delivery = checkout_key_delivery(session_id)
+    if not delivery:
+        raise RuntimeError("The provisioned API key could not be loaded for email delivery.")
+    if not delivery["email_sent_at"]:
+        send_api_key_email(str(delivery["email"]), str(delivery["api_key"]))
+        mark_checkout_email_sent(session_id)
+    return "email_delivered"
+
+
 def handle_webhook(payload: bytes, signature: str | None) -> dict[str, str]:
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
     if not webhook_secret:
@@ -169,7 +207,16 @@ def handle_webhook(payload: bytes, signature: str | None) -> dict[str, str]:
 
     event_type = event["type"]
     obj = event["data"]["object"]
-    if event_type in {
+    event_id = event.get("id")
+    if not event_id:
+        raise ValueError("Stripe webhook event is missing its event ID.")
+    if event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}:
+        outcome = _deliver_checkout_key(obj)
+        # Record only after delivery succeeds. If email delivery fails, Stripe
+        # retries and the encrypted key is reused rather than regenerated.
+        if outcome == "email_delivered":
+            record_stripe_event(str(event_id), int(event.get("created") or 0), event_type)
+    elif event_type in {
         "customer.subscription.updated",
         "customer.subscription.deleted",
         "customer.subscription.paused",
