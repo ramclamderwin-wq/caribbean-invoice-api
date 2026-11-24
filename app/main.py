@@ -269,8 +269,15 @@ def _extract_pdf(data: bytes) -> tuple[str, bool, int]:
                         if bitmap.width * bitmap.height > MAX_PDF_PAGE_PIXELS:
                             raise HTTPException(status_code=413, detail="A PDF page exceeds the OCR pixel limit.")
                         page_image = bitmap.to_pil()
-                        page_text = _ocr_image(page_image)
+                        try:
+                            page_text = _ocr_image(page_image)
+                        finally:
+                            page_image.close()
                     finally:
+                        # The rendered bitmap owns the backing buffer; close it
+                        # only after the PIL view has been released.
+                        if hasattr(bitmap, "warn_on_close"):
+                            bitmap.warn_on_close = False
                         bitmap.close()
                     used_ocr = True
                 chunks.append(page_text)
