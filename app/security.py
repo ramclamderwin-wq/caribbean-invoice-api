@@ -8,6 +8,8 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
+from cryptography.fernet import Fernet, InvalidToken
+
 DEFAULT_MONTHLY_LIMIT = int(os.getenv("DEFAULT_MONTHLY_LIMIT", "1000"))
 
 
@@ -56,7 +58,20 @@ def init_db() -> None:
             checkout_session_id TEXT PRIMARY KEY,
             api_key_id INTEGER NOT NULL UNIQUE,
             claimed_at TEXT NOT NULL,
+            encrypted_api_key TEXT,
+            browser_claimed_at TEXT,
+            email_sent_at TEXT,
+            delivery_email TEXT,
             FOREIGN KEY(api_key_id) REFERENCES api_keys(id))""")
+        checkout_columns = {row["name"] for row in conn.execute("PRAGMA table_info(checkout_claims)").fetchall()}
+        for name, definition in {
+            "encrypted_api_key": "TEXT",
+            "browser_claimed_at": "TEXT",
+            "email_sent_at": "TEXT",
+            "delivery_email": "TEXT",
+        }.items():
+            if name not in checkout_columns:
+                conn.execute(f"ALTER TABLE checkout_claims ADD COLUMN {name} {definition}")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_usage_key_date ON api_usage(api_key_id, used_at)")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_subscription ON api_keys(subscription_id) WHERE subscription_id IS NOT NULL")
         conn.execute("""CREATE TABLE IF NOT EXISTS stripe_webhook_events (
@@ -88,21 +103,93 @@ def create_api_key(label: str, monthly_limit: int | None = None) -> tuple[str, d
     return raw_key, {"id": key_id, "label": label, "monthly_limit": limit, "created_at": created_at}
 
 
-def provision_checkout_key(session_id: str, email: str, plan: str, customer_id: str,
-                           subscription_id: str, monthly_limit: int) -> str | None:
-    raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
-    created_at = datetime.now(timezone.utc).isoformat()
+def _api_key_fernet() -> Fernet:
+    secret = os.getenv("API_KEY_ENCRYPTION_KEY")
+    if not secret:
+        raise RuntimeError("API_KEY_ENCRYPTION_KEY must be configured before issuing customer API keys.")
     try:
-        with _connect() as conn:
-            cursor = conn.execute(
-                """INSERT INTO api_keys(label,key_hash,monthly_limit,active,created_at,plan,
-                   stripe_customer_id,subscription_id) VALUES (?,?,?,?,?,?,?,?)""",
-                (email, hash_key(raw_key), monthly_limit, 1, created_at, plan, customer_id, subscription_id))
-            conn.execute("INSERT INTO checkout_claims(checkout_session_id,api_key_id,claimed_at) VALUES (?,?,?)",
-                         (session_id, cursor.lastrowid, created_at))
-    except sqlite3.IntegrityError:
-        return None
+        return Fernet(secret.encode("ascii"))
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError("API_KEY_ENCRYPTION_KEY must be a valid Fernet key.") from exc
+
+
+def provision_checkout_key(
+    session_id: str, email: str, plan: str, customer_id: str,
+    subscription_id: str, monthly_limit: int, *, claim: bool = False,
+) -> str:
+    """Create once and keep the raw key encrypted so webhook retries can deliver it."""
+    fernet = _api_key_fernet()
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute(
+            """SELECT encrypted_api_key,browser_claimed_at FROM checkout_claims
+               WHERE checkout_session_id=?""",
+            (session_id,),
+        ).fetchone()
+        if existing:
+            if claim and existing["browser_claimed_at"] is not None:
+                raise ValueError("This checkout session's API key has already been claimed in the browser. Check the delivery email.")
+            encrypted = existing["encrypted_api_key"]
+            if not encrypted:
+                raise RuntimeError("The existing checkout key cannot be recovered securely. Contact support.")
+            try:
+                raw_key = fernet.decrypt(encrypted.encode("ascii")).decode("utf-8")
+            except (InvalidToken, ValueError) as exc:
+                raise RuntimeError("The checkout key could not be decrypted. Check API_KEY_ENCRYPTION_KEY.") from exc
+            if claim:
+                conn.execute(
+                    "UPDATE checkout_claims SET browser_claimed_at=? WHERE checkout_session_id=?",
+                    (now, session_id),
+                )
+            return raw_key
+
+        raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
+        encrypted = fernet.encrypt(raw_key.encode("utf-8")).decode("ascii")
+        cursor = conn.execute(
+            """INSERT INTO api_keys(label,key_hash,monthly_limit,active,created_at,plan,
+               stripe_customer_id,subscription_id) VALUES (?,?,?,?,?,?,?,?)""",
+            (email, hash_key(raw_key), monthly_limit, 1, now, plan, customer_id, subscription_id),
+        )
+        conn.execute(
+            """INSERT INTO checkout_claims(
+               checkout_session_id,api_key_id,claimed_at,encrypted_api_key,
+               browser_claimed_at,delivery_email) VALUES (?,?,?,?,?,?)""",
+            (session_id, cursor.lastrowid, now, encrypted, now if claim else None, email),
+        )
     return raw_key
+
+
+def checkout_key_delivery(session_id: str) -> dict[str, Any] | None:
+    fernet = _api_key_fernet()
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT encrypted_api_key,delivery_email,email_sent_at
+               FROM checkout_claims WHERE checkout_session_id=?""",
+            (session_id,),
+        ).fetchone()
+    if not row:
+        return None
+    encrypted = row["encrypted_api_key"]
+    if not encrypted:
+        raise RuntimeError("The checkout API key is not available for delivery.")
+    try:
+        raw_key = fernet.decrypt(encrypted.encode("ascii")).decode("utf-8")
+    except (InvalidToken, ValueError) as exc:
+        raise RuntimeError("The checkout key could not be decrypted. Check API_KEY_ENCRYPTION_KEY.") from exc
+    return {
+        "email": row["delivery_email"],
+        "api_key": raw_key,
+        "email_sent_at": row["email_sent_at"],
+    }
+
+
+def mark_checkout_email_sent(session_id: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE checkout_claims SET email_sent_at=? WHERE checkout_session_id=?",
+            (datetime.now(timezone.utc).isoformat(), session_id),
+        )
 
 
 def get_key_record(api_key: str) -> dict[str, Any] | None:
