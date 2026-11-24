@@ -41,6 +41,17 @@ def _monthly_limit(plan: str) -> int:
     return int(os.getenv(PLAN_LIMIT_ENV[plan], str(DEFAULT_LIMITS[plan])))
 
 
+def _stripe_period_value(subscription: Any, field: str) -> str | None:
+    value = subscription.get(field)
+    if value is None:
+        return None
+    try:
+        return datetime.fromtimestamp(int(value), timezone.utc).isoformat()
+    except (TypeError, ValueError, OSError):
+        logger.warning("Stripe subscription returned an invalid %s timestamp.", field)
+        return None
+
+
 def create_checkout_session(plan: str, email: str) -> str:
     _configure()
     if not all(os.getenv(name) for name in ("API_KEY_ENCRYPTION_KEY", "RESEND_API_KEY", "FROM_EMAIL")):
@@ -94,6 +105,8 @@ def claim_checkout_key(session_id: str) -> str:
     return provision_checkout_key(
         session_id, email, plan, str(customer_id), str(subscription_id),
         _monthly_limit(plan), claim=True,
+        current_period_start=_stripe_period_value(subscription, "current_period_start"),
+        current_period_end=_stripe_period_value(subscription, "current_period_end"),
     )
 
 
@@ -240,6 +253,8 @@ def _apply_subscription_event(event: Any, event_type: str, subscription_id: str)
         plan,
         str(customer_id) if customer_id else None,
         _monthly_limit(plan) if plan else None,
+        _stripe_period_value(current, "current_period_start"),
+        _stripe_period_value(current, "current_period_end"),
     )
 
 
@@ -269,6 +284,8 @@ def _deliver_checkout_key(session: Any) -> str:
     provision_checkout_key(
         session_id, str(email), plan, str(customer_id), str(subscription_id),
         _monthly_limit(plan), claim=False,
+        current_period_start=_stripe_period_value(current, "current_period_start"),
+        current_period_end=_stripe_period_value(current, "current_period_end"),
     )
     delivery = checkout_key_delivery(session_id)
     if not delivery:
