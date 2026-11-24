@@ -133,21 +133,28 @@ Open `/dashboard` on the deployed service to use the lightweight developer dashb
 
 The included Blueprint config uses a paid always-on service and a persistent disk because customer keys and usage records must survive restarts. Before creating the Blueprint, review Render's current service and disk charges. Set the secret `API_ADMIN_KEY` and a comma-separated `CORS_ORIGINS` value in Render's environment settings. Never commit secrets to GitHub.
 
-## Stripe subscription billing (integration in progress)
+## Stripe subscription billing
 
-Stripe Checkout and Customer Portal endpoints are implemented in the API. They require server-side configuration and a verified webhook before they can be used.
+Stripe Checkout is designed for public customer signup. New customers do not need an API key before choosing a plan.
 
-- `POST /v1/billing/checkout` — authenticated with an existing API key; creates a hosted subscription Checkout session for Starter, Professional, or Business.
-- `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an API key already linked to a Stripe customer.
-- `POST /v1/billing/webhook` — verifies Stripe signatures and updates the linked API key's plan, monthly quota, and active status for subscription events.
+- `POST /v1/billing/checkout` — public endpoint accepting a plan and email, then returning a hosted Stripe Checkout URL.
+- `GET /v1/billing/claim?session_id=...` — verifies the completed Stripe subscription with Stripe and issues one API key once. The API key is stored as a hash and cannot be retrieved after the one-time claim.
+- `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an API key linked to a Stripe customer.
+- `POST /v1/billing/webhook` — verifies Stripe signatures and updates linked API-key access when a subscription changes or payment fails.
+
+The dashboard at `/dashboard` contains plan selection and a one-time API-key claim screen. For now, the key is displayed on the post-checkout page; an email delivery provider has not yet been configured. Customers must copy and securely save the key when it appears.
+
+Plans configured for the Sandbox:
+- Starter: $19/month, 1,000 API requests.
+- Professional: $49/month, 5,000 API requests.
+- Business: $149/month, 20,000 API requests.
 
 Required environment variables:
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PROFESSIONAL`, `STRIPE_PRICE_BUSINESS`
-- `CHECKOUT_SUCCESS_URL`, `CHECKOUT_CANCEL_URL`, `CUSTOMER_PORTAL_RETURN_URL`
+- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (keep these only in Render secret settings).
+- `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PROFESSIONAL`, `STRIPE_PRICE_BUSINESS`.
+- `CHECKOUT_SUCCESS_URL`, `CHECKOUT_CANCEL_URL`, `CUSTOMER_PORTAL_RETURN_URL`.
 - Optional quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
 
-Create the three recurring prices in Stripe and place their Price IDs in the environment variables; do not put secret keys or webhook secrets in GitHub. Prices shown in the business plan are proposals until approved and created in Stripe. The company must finish test-mode checkout and webhook testing before any live subscription is offered.
+Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion and invoice payment failure events before testing subscription lifecycle. Stripe Tax remains disabled until the company determines its registration and collection obligations.
 
-Important current limitation: API keys are still provisioned by the administrator using `POST /v1/admin/api-keys`. The customer self-signup/key-delivery flow is not yet implemented. The API must not be advertised as a fully automated self-service SaaS until that flow, subscription lifecycle tests, and deployment verification are complete.
+The customer self-signup code is under test and must pass CI and be deployed/configured before it is advertised as a working public service.

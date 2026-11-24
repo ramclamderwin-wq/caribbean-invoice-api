@@ -25,28 +25,15 @@ def _connect() -> sqlite3.Connection:
 
 def init_db() -> None:
     with _connect() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS api_keys (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                label TEXT NOT NULL,
-                key_hash TEXT NOT NULL UNIQUE,
-                monthly_limit INTEGER NOT NULL,
-                active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL,
-                plan TEXT NOT NULL DEFAULT 'free',
-                stripe_customer_id TEXT,
-                subscription_id TEXT
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS api_usage (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                api_key_id INTEGER NOT NULL,
-                used_at TEXT NOT NULL,
-                FOREIGN KEY(api_key_id) REFERENCES api_keys(id)
-            )
-        """)
-        # Lightweight forward-only migration for databases created by earlier releases.
+        conn.execute("""CREATE TABLE IF NOT EXISTS api_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL,
+            key_hash TEXT NOT NULL UNIQUE, monthly_limit INTEGER NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
+            plan TEXT NOT NULL DEFAULT 'free', stripe_customer_id TEXT,
+            subscription_id TEXT)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS api_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, api_key_id INTEGER NOT NULL,
+            used_at TEXT NOT NULL, FOREIGN KEY(api_key_id) REFERENCES api_keys(id))""")
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(api_keys)").fetchall()}
         for name, definition in {
             "plan": "TEXT NOT NULL DEFAULT 'free'",
@@ -55,6 +42,11 @@ def init_db() -> None:
         }.items():
             if name not in columns:
                 conn.execute(f"ALTER TABLE api_keys ADD COLUMN {name} {definition}")
+        conn.execute("""CREATE TABLE IF NOT EXISTS checkout_claims (
+            checkout_session_id TEXT PRIMARY KEY,
+            api_key_id INTEGER NOT NULL UNIQUE,
+            claimed_at TEXT NOT NULL,
+            FOREIGN KEY(api_key_id) REFERENCES api_keys(id))""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_usage_key_date ON api_usage(api_key_id, used_at)")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_subscription ON api_keys(subscription_id) WHERE subscription_id IS NOT NULL")
 
@@ -64,7 +56,7 @@ def hash_key(api_key: str) -> str:
 
 
 def create_api_key(label: str, monthly_limit: int | None = None) -> tuple[str, dict[str, Any]]:
-    raw_key = "iia_live_" + secrets.token_urlsafe(32)
+    raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
     limit = monthly_limit or DEFAULT_MONTHLY_LIMIT
     if limit < 1:
         raise ValueError("monthly_limit must be positive")
@@ -72,85 +64,70 @@ def create_api_key(label: str, monthly_limit: int | None = None) -> tuple[str, d
     with _connect() as conn:
         cursor = conn.execute(
             "INSERT INTO api_keys(label, key_hash, monthly_limit, created_at) VALUES (?, ?, ?, ?)",
-            (label, hash_key(raw_key), limit, created_at),
-        )
+            (label, hash_key(raw_key), limit, created_at))
         key_id = cursor.lastrowid
     return raw_key, {"id": key_id, "label": label, "monthly_limit": limit, "created_at": created_at}
+
+
+def provision_checkout_key(session_id: str, email: str, plan: str, customer_id: str,
+                           subscription_id: str, monthly_limit: int) -> str | None:
+    raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
+    created_at = datetime.now(timezone.utc).isoformat()
+    try:
+        with _connect() as conn:
+            cursor = conn.execute(
+                """INSERT INTO api_keys(label,key_hash,monthly_limit,active,created_at,plan,
+                   stripe_customer_id,subscription_id) VALUES (?,?,?,?,?,?,?,?)""",
+                (email, hash_key(raw_key), monthly_limit, 1, created_at, plan, customer_id, subscription_id))
+            conn.execute("INSERT INTO checkout_claims(checkout_session_id,api_key_id,claimed_at) VALUES (?,?,?)",
+                         (session_id, cursor.lastrowid, created_at))
+    except sqlite3.IntegrityError:
+        return None
+    return raw_key
 
 
 def get_key_record(api_key: str) -> dict[str, Any] | None:
     with _connect() as conn:
         row = conn.execute(
-            "SELECT id, label, monthly_limit, active, plan, stripe_customer_id, subscription_id FROM api_keys WHERE key_hash = ?",
-            (hash_key(api_key),),
-        ).fetchone()
+            "SELECT id,label,monthly_limit,active,plan,stripe_customer_id,subscription_id FROM api_keys WHERE key_hash=?",
+            (hash_key(api_key),)).fetchone()
     return dict(row) if row else None
-
-
-def get_usage(key_id: int) -> dict[str, int]:
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT COUNT(*) AS used FROM api_usage WHERE api_key_id = ? AND substr(used_at, 1, 7) = ?",
-            (key_id, month),
-        ).fetchone()
-    used = int(row["used"])
-    return {"used": used, "monthly_limit": 0, "remaining": 0}
-
-
-def record_usage(key_id: int) -> None:
-    with _connect() as conn:
-        conn.execute(
-            "INSERT INTO api_usage(api_key_id, used_at) VALUES (?, ?)",
-            (key_id, datetime.now(timezone.utc).isoformat()),
-        )
 
 
 def key_usage(key_id: int, monthly_limit: int) -> dict[str, int]:
     month = datetime.now(timezone.utc).strftime("%Y-%m")
     with _connect() as conn:
-        row = conn.execute(
-            "SELECT COUNT(*) AS used FROM api_usage WHERE api_key_id = ? AND substr(used_at, 1, 7) = ?",
-            (key_id, month),
-        ).fetchone()
+        row = conn.execute("SELECT COUNT(*) AS used FROM api_usage WHERE api_key_id=? AND substr(used_at,1,7)=?",
+                           (key_id, month)).fetchone()
     used = int(row["used"])
-    return {"used": used, "monthly_limit": monthly_limit, "remaining": max(0, monthly_limit - used)}
+    return {"used": used, "monthly_limit": monthly_limit, "remaining": max(0, monthly_limit-used)}
+
+
+def record_usage(key_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("INSERT INTO api_usage(api_key_id,used_at) VALUES (?,?)",
+                     (key_id, datetime.now(timezone.utc).isoformat()))
+
 
 def requests_in_last_minute(key_id: int) -> int:
     from datetime import timedelta
-    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+    cutoff = (datetime.now(timezone.utc)-timedelta(seconds=60)).isoformat()
     with _connect() as conn:
-        row = conn.execute(
-            "SELECT COUNT(*) AS used FROM api_usage WHERE api_key_id = ? AND used_at >= ?",
-            (key_id, cutoff),
-        ).fetchone()
+        row = conn.execute("SELECT COUNT(*) AS used FROM api_usage WHERE api_key_id=? AND used_at>=?",
+                           (key_id, cutoff)).fetchone()
     return int(row["used"])
 
 
-
-def set_subscription(
-    key_id: int,
-    plan: str,
-    status: str,
-    customer_id: str | None,
-    subscription_id: str,
-    monthly_limit: int,
-) -> None:
+def set_subscription(key_id: int, plan: str, status: str, customer_id: str | None,
+                     subscription_id: str, monthly_limit: int) -> None:
     active = 1 if status in {"active", "trialing"} else 0
     with _connect() as conn:
-        conn.execute(
-            """UPDATE api_keys
-               SET plan = ?, active = ?, monthly_limit = ?,
-                   stripe_customer_id = ?, subscription_id = ?
-               WHERE id = ?""",
-            (plan, active, monthly_limit, customer_id, subscription_id, key_id),
-        )
+        conn.execute("""UPDATE api_keys SET plan=?,active=?,monthly_limit=?,stripe_customer_id=?,
+                     subscription_id=? WHERE id=?""",
+                     (plan, active, monthly_limit, customer_id, subscription_id, key_id))
 
 
 def set_subscription_by_id(subscription_id: str, status: str) -> None:
     active = 1 if status in {"active", "trialing"} else 0
     with _connect() as conn:
-        conn.execute(
-            "UPDATE api_keys SET active = ? WHERE subscription_id = ?",
-            (active, subscription_id),
-        )
+        conn.execute("UPDATE api_keys SET active=? WHERE subscription_id=?", (active, subscription_id))

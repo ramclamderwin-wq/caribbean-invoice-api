@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.security import create_api_key, get_key_record, init_db, key_usage, record_usage, requests_in_last_minute
-from app.billing import create_checkout_session, create_portal_session, handle_webhook
+from app.billing import create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook
 
 APP_NAME = "Invoice Intelligence API"
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
@@ -60,7 +60,7 @@ class CreateKeyRequest(BaseModel):
 
 class CheckoutRequest(BaseModel):
     plan: str = Field(pattern=r"^(starter|professional|business)$")
-    email: str = Field(min_length=5, max_length=254, pattern=r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+    email: str = Field(min_length=5, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
@@ -89,17 +89,27 @@ def require_billing_key(authorization: str | None = Header(default=None)) -> dic
 
 
 @app.post("/v1/billing/checkout")
-def billing_checkout(
-    request: CheckoutRequest,
-    key_record: dict[str, Any] = Depends(require_billing_key),
-) -> dict[str, str]:
+def billing_checkout(request: CheckoutRequest) -> dict[str, str]:
     try:
-        url = create_checkout_session(key_record, request.plan, request.email)
+        url = create_checkout_session(request.plan, request.email)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to create Stripe Checkout session.") from exc
     return {"checkout_url": url}
+
+
+@app.get("/v1/billing/claim")
+def billing_claim(session_id: str) -> dict[str, str]:
+    try:
+        api_key = claim_checkout_key(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to verify checkout with Stripe.") from exc
+    return {"api_key": api_key, "warning": "Copy this API key now. It is displayed only once and cannot be recovered."}
 
 
 @app.post("/v1/billing/portal")
