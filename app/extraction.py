@@ -96,7 +96,7 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
         r"\bcurrency\s*[:\-]?\s*([A-Z]{3})\b",
         r"\b(USD|BZD|EUR|GBP|CAD|AUD|NZD|MXN|JPY|CHF|INR|SGD|HKD)\b",
         r"\b(BZ\$)\b",
-    ])
+    ], text)
     if currency:
         currency = {"BZ$": "BZD"}.get(currency.upper(), currency.upper())
 
