@@ -4,7 +4,7 @@ services:
     runtime: docker
     plan: starter
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeploy: false
     disk:
       name: quillvora-data
       mountPath: /var/data
@@ -15,7 +15,13 @@ services:
       - key: API_ADMIN_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: "*"
+        value: ""
+      - key: API_KEY_ENCRYPTION_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
