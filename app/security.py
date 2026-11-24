@@ -37,7 +37,8 @@ def init_db() -> None:
             key_hash TEXT NOT NULL UNIQUE, monthly_limit INTEGER NOT NULL,
             active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
             plan TEXT NOT NULL DEFAULT 'free', stripe_customer_id TEXT,
-            subscription_id TEXT)""")
+            subscription_id TEXT, subscription_status TEXT NOT NULL DEFAULT 'active',
+            past_due_since TEXT)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS api_usage (
             id INTEGER PRIMARY KEY AUTOINCREMENT, api_key_id INTEGER NOT NULL,
             used_at TEXT NOT NULL, FOREIGN KEY(api_key_id) REFERENCES api_keys(id))""")
@@ -46,6 +47,8 @@ def init_db() -> None:
             "plan": "TEXT NOT NULL DEFAULT 'free'",
             "stripe_customer_id": "TEXT",
             "subscription_id": "TEXT",
+            "subscription_status": "TEXT NOT NULL DEFAULT 'active'",
+            "past_due_since": "TEXT",
         }.items():
             if name not in columns:
                 conn.execute(f"ALTER TABLE api_keys ADD COLUMN {name} {definition}")
@@ -56,6 +59,11 @@ def init_db() -> None:
             FOREIGN KEY(api_key_id) REFERENCES api_keys(id))""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_usage_key_date ON api_usage(api_key_id, used_at)")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_subscription ON api_keys(subscription_id) WHERE subscription_id IS NOT NULL")
+        conn.execute("""CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+            event_id TEXT PRIMARY KEY, event_created INTEGER NOT NULL,
+            event_type TEXT NOT NULL, received_at TEXT NOT NULL)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS stripe_subscription_state (
+            subscription_id TEXT PRIMARY KEY, last_event_created INTEGER NOT NULL)""")
 
 
 def hash_key(api_key: str) -> str:
@@ -96,7 +104,7 @@ def provision_checkout_key(session_id: str, email: str, plan: str, customer_id: 
 def get_key_record(api_key: str) -> dict[str, Any] | None:
     with _connect() as conn:
         row = conn.execute(
-            "SELECT id,label,monthly_limit,active,plan,stripe_customer_id,subscription_id FROM api_keys WHERE key_hash=?",
+            "SELECT id,label,monthly_limit,active,plan,stripe_customer_id,subscription_id,subscription_status,past_due_since FROM api_keys WHERE key_hash=?",
             (hash_key(api_key),)).fetchone()
     return dict(row) if row else None
 
@@ -147,16 +155,100 @@ def requests_in_last_minute(key_id: int) -> int:
     return int(row["used"])
 
 
+def _subscription_access_state(status: str) -> tuple[int, str | None]:
+    now = datetime.now(timezone.utc).isoformat()
+    if status in {"active", "trialing"}:
+        return 1, None
+    if status == "past_due":
+        return 1, now
+    return 0, None
+
+
 def set_subscription(key_id: int, plan: str, status: str, customer_id: str | None,
                      subscription_id: str, monthly_limit: int) -> None:
-    active = 1 if status in {"active", "trialing"} else 0
+    active, past_due_since = _subscription_access_state(status)
     with _connect() as conn:
         conn.execute("""UPDATE api_keys SET plan=?,active=?,monthly_limit=?,stripe_customer_id=?,
-                     subscription_id=? WHERE id=?""",
-                     (plan, active, monthly_limit, customer_id, subscription_id, key_id))
+                     subscription_id=?,subscription_status=?,
+                     past_due_since=CASE WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END
+                     WHERE id=?""",
+                     (plan, active, monthly_limit, customer_id, subscription_id, status,
+                      status, past_due_since, key_id))
 
 
-def set_subscription_by_id(subscription_id: str, status: str) -> None:
-    active = 1 if status in {"active", "trialing"} else 0
+def set_subscription_by_id(subscription_id: str, status: str,
+                            plan: str | None = None, monthly_limit: int | None = None) -> None:
+    active, past_due_since = _subscription_access_state(status)
     with _connect() as conn:
-        conn.execute("UPDATE api_keys SET active=? WHERE subscription_id=?", (active, subscription_id))
+        conn.execute("""UPDATE api_keys SET active=?,subscription_status=?,
+                     past_due_since=CASE WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END,
+                     plan=COALESCE(?,plan),monthly_limit=COALESCE(?,monthly_limit)
+                     WHERE subscription_id=?""",
+                     (active, status, status, past_due_since, plan, monthly_limit, subscription_id))
+
+
+def apply_stripe_subscription_event(
+    event_id: str, event_created: int, event_type: str, subscription_id: str,
+    status: str, plan: str | None = None, customer_id: str | None = None,
+    monthly_limit: int | None = None,
+) -> str:
+    """Atomically deduplicate webhook events and ignore older subscription events."""
+    active, past_due_since = _subscription_access_state(status)
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM stripe_webhook_events WHERE event_id=?", (event_id,)).fetchone():
+            return "duplicate"
+        last = conn.execute(
+            "SELECT last_event_created FROM stripe_subscription_state WHERE subscription_id=?",
+            (subscription_id,),
+        ).fetchone()
+        if last and int(event_created) < int(last["last_event_created"]):
+            conn.execute(
+                "INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at) VALUES (?,?,?,?)",
+                (event_id, int(event_created), event_type, now),
+            )
+            return "stale"
+        conn.execute("""UPDATE api_keys SET active=?,subscription_status=?,
+                     past_due_since=CASE WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END,
+                     plan=COALESCE(?,plan),monthly_limit=COALESCE(?,monthly_limit),
+                     stripe_customer_id=COALESCE(?,stripe_customer_id)
+                     WHERE subscription_id=?""",
+                     (active, status, status, past_due_since, plan, monthly_limit, customer_id, subscription_id))
+        conn.execute("""INSERT INTO stripe_subscription_state(subscription_id,last_event_created)
+                     VALUES (?,?) ON CONFLICT(subscription_id) DO UPDATE SET
+                     last_event_created=MAX(last_event_created,excluded.last_event_created)""",
+                     (subscription_id, int(event_created)))
+        conn.execute(
+            "INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at) VALUES (?,?,?,?)",
+            (event_id, int(event_created), event_type, now),
+        )
+    return "applied"
+
+
+def record_stripe_event(event_id: str, event_created: int, event_type: str) -> str:
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        try:
+            conn.execute(
+                "INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at) VALUES (?,?,?,?)",
+                (event_id, int(event_created), event_type, now),
+            )
+        except sqlite3.IntegrityError:
+            return "duplicate"
+    return "recorded"
+
+
+def rotate_api_key(key_id: int) -> str:
+    """Rotate a key in place so quota history and subscription linkage are preserved."""
+    raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
+    with _connect() as conn:
+        cursor = conn.execute("UPDATE api_keys SET key_hash=? WHERE id=? AND active=1", (hash_key(raw_key), key_id))
+        if cursor.rowcount != 1:
+            raise ValueError("API key is inactive or no longer exists.")
+    return raw_key
+
+
+def revoke_api_key(key_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE api_keys SET active=0 WHERE id=?", (key_id,))
