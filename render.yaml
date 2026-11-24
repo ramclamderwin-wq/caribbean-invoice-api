@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: invosentry-api
+    name: trelliqo-api
     runtime: docker
     plan: starter
     healthCheckPath: /health
     autoDeploy: true
     disk:
-      name: invosentry-data
+      name: trelliqo-data
       mountPath: /var/data
       sizeGB: 1
     envVars:
