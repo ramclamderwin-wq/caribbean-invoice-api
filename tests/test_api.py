@@ -1,4 +1,9 @@
-import io\n\nimport fitz\nimport pytest\nfrom fastapi.testclient import TestClient\nfrom PIL import Image
+import io
+
+import fitz
+import pytest
+from fastapi.testclient import TestClient
+from PIL import Image
 
 from app.main import app
 from app.security import create_api_key
@@ -10,6 +15,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.delenv("API_ADMIN_KEY", raising=False)
     with TestClient(app) as test_client:
         yield test_client
+
+
+def _auth_headers(label="api-test"):
+    key, _ = create_api_key(label, 100)
+    return {"Authorization": f"Bearer {key}"}
 
 
 def test_health_endpoint(client):
@@ -24,12 +34,16 @@ def test_extract_text_requires_api_key(client):
 
 
 def test_extract_text_returns_structured_invoice(client):
-    key, _ = create_api_key("automated-test", 100)
     response = client.post(
         "/v1/extract-text",
-        headers={"Authorization": f"Bearer {key}"},
-        json={"text": "ACME SUPPLIES\nInvoice No: AC-10\nDate: 2026-11-20\n"
-                     "Currency: USD\nSubtotal: 100.00\nTax: 8.00\nTotal: 108.00"},
+        headers=_auth_headers(),
+        json={"text": """ACME SUPPLIES
+Invoice No: AC-10
+Date: 2026-11-20
+Currency: USD
+Subtotal: 100.00
+Tax: 8.00
+Total: 108.00"""},
     )
     assert response.status_code == 200
     body = response.json()
@@ -41,8 +55,7 @@ def test_extract_text_returns_structured_invoice(client):
 
 
 def test_usage_counts_successful_extraction(client):
-    key, _ = create_api_key("usage-test", 100)
-    headers = {"Authorization": f"Bearer {key}"}
+    headers = _auth_headers("usage-test")
     response = client.post(
         "/v1/extract-text",
         headers=headers,
@@ -54,25 +67,24 @@ def test_usage_counts_successful_extraction(client):
     assert usage.json()["used"] == 1
 
 
-
-def _create_key():
-    key, _ = create_api_key("file-test", 100)
-    return {"Authorization": f"Bearer {key}"}
-
-
 def test_extract_text_based_pdf_upload(client):
     document = fitz.open()
     page = document.new_page()
-    page.insert_text(
-        (72, 72),
-        "ACME SUPPLIES LLC\\nInvoice No: PDF-10\\nDate: 2026-11-20\\n"
-        "Currency: USD\\nSubtotal: 50.00\\nTax: 4.00\\nTotal: 54.00",
+    page.insert_textbox(
+        fitz.Rect(50, 50, 550, 300),
+        """ACME SUPPLIES LLC
+Invoice No: PDF-10
+Date: 2026-11-20
+Currency: USD
+Subtotal: 50.00
+Tax: 4.00
+Total: 54.00""",
     )
     payload = document.tobytes()
     document.close()
     response = client.post(
         "/v1/extract-file",
-        headers=_create_key(),
+        headers=_auth_headers("pdf-test"),
         files={"file": ("invoice.pdf", payload, "application/pdf")},
     )
     assert response.status_code == 200
@@ -89,12 +101,17 @@ def test_extract_image_upload_uses_ocr(client, monkeypatch):
     image.save(buffer, format="PNG")
     monkeypatch.setattr(
         "app.main._ocr_image",
-        lambda _image: "ACME IMAGE SUPPLIES\\nInvoice No: IMG-2\\nDate: 2026-11-20\\n"
-                       "Currency: USD\\nSubtotal: 20.00\\nTax: 1.60\\nTotal: 21.60",
+        lambda _image: """ACME IMAGE SUPPLIES
+Invoice No: IMG-2
+Date: 2026-11-20
+Currency: USD
+Subtotal: 20.00
+Tax: 1.60
+Total: 21.60""",
     )
     response = client.post(
         "/v1/extract-file",
-        headers=_create_key(),
+        headers=_auth_headers("image-test"),
         files={"file": ("invoice.png", buffer.getvalue(), "image/png")},
     )
     assert response.status_code == 200
@@ -108,7 +125,7 @@ def test_extract_image_upload_uses_ocr(client, monkeypatch):
 def test_rejects_invalid_pdf_content(client):
     response = client.post(
         "/v1/extract-file",
-        headers=_create_key(),
+        headers=_auth_headers("invalid-pdf-test"),
         files={"file": ("broken.pdf", b"not a pdf", "application/pdf")},
     )
     assert response.status_code == 400
@@ -117,7 +134,7 @@ def test_rejects_invalid_pdf_content(client):
 def test_rejects_unsupported_file_extension(client):
     response = client.post(
         "/v1/extract-file",
-        headers=_create_key(),
+        headers=_auth_headers("unsupported-test"),
         files={"file": ("invoice.docx", b"content", "application/octet-stream")},
     )
     assert response.status_code == 415
