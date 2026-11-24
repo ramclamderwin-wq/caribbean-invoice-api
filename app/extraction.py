@@ -37,7 +37,7 @@ def _normalise_amount(value: str | None) -> str | None:
     negative = value.startswith("(") and value.endswith(")")
     value = value.strip("()")
     value = re.sub(r"^[A-Z]{3}", "", value, flags=re.I)
-    value = value.replace("$", "").replace("€", "").replace("£", "")
+    value = value.replace("BZ$", "").replace("$", "").replace("€", "").replace("£", "")
     # Infer decimal separator when both comma and dot occur; otherwise a
     # single comma with exactly two trailing digits is treated as decimal.
     if "," in value and "." in value:
