@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import io
-import threading
+import asyncio
 import os
 import re
 import shutil
@@ -37,7 +37,7 @@ MAX_PDF_PAGE_PIXELS = int(os.getenv("MAX_PDF_PAGE_PIXELS", "16000000"))
 MAX_OCR_PAGES = int(os.getenv("MAX_OCR_PAGES", "5"))
 OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "30"))
 OCR_LANGUAGES = os.getenv("OCR_LANGUAGES", "eng+spa")
-_FILE_PROCESSING_SEMAPHORE = threading.BoundedSemaphore(int(os.getenv("MAX_CONCURRENT_FILE_JOBS", "1")) )
+_FILE_PROCESSING_SEMAPHORE = asyncio.Semaphore(int(os.getenv("MAX_CONCURRENT_FILE_JOBS", "1")) )
 TESSERACT_CMD = os.getenv("TESSERACT_CMD")
 if TESSERACT_CMD:
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
@@ -395,12 +395,6 @@ def _extract_pdf(data: bytes) -> tuple[str, bool, int]:
         document.close()
 
 
-def _process_file_with_limit(data: bytes, suffix: str, filename: str) -> tuple[str, bool, int, str]:
-    # Bound concurrent image/PDF decodes to protect the 512 MB deployment tier.
-    with _FILE_PROCESSING_SEMAPHORE:
-        return _process_file(data, suffix, filename)
-
-
 def _process_file(data: bytes, suffix: str, filename: str) -> tuple[str, bool, int, str]:
     if suffix == ".pdf":
         if not data.startswith(b"%PDF"):
@@ -472,7 +466,7 @@ def usage(key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, An
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
+async def health() -> dict[str, str]:
     return {"status": "ok", "service": "quillvora-api"}
 
 
@@ -501,9 +495,12 @@ async def extract_file(file: UploadFile = File(...), key_record: dict[str, Any] 
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
     # All PDF parsing, image decoding and OCR run off the ASGI event loop.
-    text, ocr_used, page_count, source_type = await run_in_threadpool(
-        _process_file_with_limit, data, suffix, filename
-    )
+    # Wait asynchronously for a file slot so queued uploads do not consume
+    # worker threads or starve synchronous endpoints.
+    async with _FILE_PROCESSING_SEMAPHORE:
+        text, ocr_used, page_count, source_type = await run_in_threadpool(
+            _process_file, data, suffix, filename
+        )
     if not text.strip():
         raise HTTPException(status_code=422, detail="No readable text was found. Try a clearer scan or higher-resolution photo.")
     result = extract_invoice_fields(text)
