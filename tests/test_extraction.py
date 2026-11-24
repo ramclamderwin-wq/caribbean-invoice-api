@@ -27,7 +27,7 @@ Grand Total: $1,080.00
     }
     assert not result["warnings"]
     assert result["review_required"] is True
-    assert result["confidence_type"] == "heuristic_presence_indicator_not_probability"
+    assert result["confidence_type"] == "not_available_not_calibrated"
 
 
 @pytest.mark.parametrize(
@@ -87,7 +87,7 @@ def test_confidence_is_not_presented_as_probability():
     )
     assert result["confidence_type"] == "heuristic_presence_indicator_not_probability"
     assert set(result["confidence"]) == set(result["fields"])
-    assert all(0 <= score <= 1 for score in result["confidence"].values())
+    assert all(score is None for score in result["confidence"].values())
 
 
 
