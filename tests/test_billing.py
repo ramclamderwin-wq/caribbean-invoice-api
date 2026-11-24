@@ -71,3 +71,76 @@ def test_past_due_subscription_enters_grace_period(tmp_path, monkeypatch):
     assert updated["active"] == 1
     assert updated["subscription_status"] == "past_due"
     assert updated["past_due_since"] is not None
+
+
+
+def test_webhook_updates_plan_from_current_stripe_price_and_deduplicates(tmp_path, monkeypatch):
+    from app.billing import handle_webhook
+    from app.security import get_key_record
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "webhook.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    monkeypatch.setenv("STRIPE_PRICE_BUSINESS", "price_business_current")
+    init_db()
+    raw_key, _ = create_api_key("webhook customer", 1000)
+    record = get_key_record(raw_key)
+    set_subscription(record["id"], "starter", "active", "cus_test_123", "sub_webhook_1", 1000)
+
+    event = {
+        "id": "evt_plan_change_1",
+        "created": 200,
+        "type": "customer.subscription.updated",
+        "data": {"object": {"id": "sub_webhook_1", "customer": "cus_test_123", "status": "active"}},
+    }
+    import app.billing as billing
+    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(billing.stripe.Subscription, "retrieve", lambda _id: {
+        "id": "sub_webhook_1",
+        "customer": "cus_test_123",
+        "status": "active",
+        "metadata": {"plan": "starter"},
+        "items": {"data": [{"price": {"id": "price_business_current"}}]},
+    })
+
+    first = handle_webhook(b"{}", "valid-signature")
+    duplicate = handle_webhook(b"{}", "valid-signature")
+    updated = get_key_record(raw_key)
+
+    assert first["outcome"] == "applied"
+    assert duplicate["outcome"] == "duplicate"
+    assert updated["plan"] == "business"
+    assert updated["monthly_limit"] == 20000
+
+
+def test_failed_payment_webhook_keeps_access_during_grace_period(tmp_path, monkeypatch):
+    from app.billing import handle_webhook
+    from app.security import get_key_record
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "past-due.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    init_db()
+    raw_key, _ = create_api_key("past due customer", 1000)
+    record = get_key_record(raw_key)
+    set_subscription(record["id"], "starter", "active", "cus_test_456", "sub_past_due", 1000)
+
+    event = {
+        "id": "evt_payment_failed_1",
+        "created": 300,
+        "type": "invoice.payment_failed",
+        "data": {"object": {"subscription": "sub_past_due"}},
+    }
+    import app.billing as billing
+    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(billing.stripe.Subscription, "retrieve", lambda _id: {
+        "id": "sub_past_due", "customer": "cus_test_456", "status": "past_due",
+        "metadata": {"plan": "starter"}, "items": {"data": []},
+    })
+
+    result = handle_webhook(b"{}", "valid-signature")
+    updated = get_key_record(raw_key)
+    assert result["outcome"] == "applied"
+    assert updated["active"] == 1
+    assert updated["subscription_status"] == "past_due"
+    assert updated["past_due_since"] is not None
