@@ -34,7 +34,7 @@ def create_paid_customer_key(session_id:str,email:str,plan:str,customer_id:str,s
     raw=_new_raw_key(); created=datetime.now(timezone.utc).isoformat()
     with _connect() as c:
         if c.execute("SELECT 1 FROM checkout_claims WHERE session_id=?",(session_id,)).fetchone(): return None
-        cur=c.execute("""INSERT INTO api_keys(label,key_hash,monthly_limit,active,created_at,plan,stripe_customer_id,subscription_id) VALUES (?,?,?,1,?,?,?,?,?)""",
+        cur=c.execute("""INSERT INTO api_keys(label,key_hash,monthly_limit,active,created_at,plan,stripe_customer_id,subscription_id) VALUES (?,?,?,1,?,?,?,?)""",
             (f"Customer {email}",hash_key(raw),monthly_limit,created,plan,customer_id,subscription_id))
         c.execute("INSERT INTO checkout_claims(session_id,api_key_id,claimed_at) VALUES (?,?,?)",(session_id,cur.lastrowid,created))
     return raw
