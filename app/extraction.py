@@ -17,7 +17,7 @@ _AMOUNT_TOKEN = re.compile(
     r"(?<![A-Za-z0-9.,])(?:BZ\$\s*|USD\s*|BZD\s*|EUR\s*|GBP\s*|"
     r"CAD\s*|AUD\s*|[$€£]\s*)?"
     r"\(?-?(?:\d{1,3}(?:[,. ]\d{3})+|\d+)(?:[,.]\d{1,2})?\)?"
-    r"(?![A-Za-z0-9%.,])",
+    r"(?![A-Za-z0-9%])(?!(?:[.,]\d))",
     re.IGNORECASE,
 )
 _DATE_TOKEN = re.compile(
