@@ -484,3 +484,31 @@ def test_dispute_webhook_suspends_customer_access(tmp_path, monkeypatch):
     updated = get_key_record(key)
     assert updated["active"] == 0
     assert updated["subscription_status"] == "disputed"
+
+
+def test_paused_subscription_collection_disables_api_key(tmp_path, monkeypatch):
+    from app.billing import handle_webhook
+    import app.billing as billing
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "paused-collection.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    init_db()
+    key, _ = create_api_key("paused customer", 100)
+    record = get_key_record(key)
+    set_subscription(record["id"], "starter", "active", "cus_paused", "sub_paused", 100)
+    event = {
+        "id": "evt_pause_collection", "created": 902,
+        "type": "customer.subscription.updated",
+        "data": {"object": {"id": "sub_paused", "customer": "cus_paused", "status": "active"}},
+    }
+    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(billing.stripe.Subscription, "retrieve", lambda _id: {
+        "id": "sub_paused", "customer": "cus_paused", "status": "active",
+        "pause_collection": {"behavior": "void"},
+        "metadata": {"plan": "starter"}, "items": {"data": []},
+    })
+    handle_webhook(b"{}", "valid-signature")
+    updated = get_key_record(key)
+    assert updated["active"] == 0
+    assert updated["subscription_status"] == "paused"
