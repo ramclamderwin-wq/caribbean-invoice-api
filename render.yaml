@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: trelliqo-api
+    name: quillvora-api
     runtime: docker
     plan: starter
     healthCheckPath: /health
     autoDeploy: true
     disk:
-      name: trelliqo-data
+      name: quillvora-data
       mountPath: /var/data
       sizeGB: 1
     envVars:
