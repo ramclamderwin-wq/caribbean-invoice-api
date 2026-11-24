@@ -28,7 +28,7 @@ from app.security import (
     rotate_api_key, revoke_api_key, database_health_check, delete_customer_local_data,
 )
 from app.billing import (
-    create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook,
+    create_checkout_session, create_portal_session, handle_webhook,
     request_api_key_recovery, confirm_api_key_recovery, cancel_customer_subscriptions,
 )
 from app.extraction import extract_invoice_fields
@@ -151,10 +151,6 @@ class CheckoutRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
-class ClaimRequest(BaseModel):
-    session_id: str = Field(min_length=10, max_length=255)
-
-
 class RecoveryRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
@@ -225,23 +221,6 @@ def billing_checkout(body: CheckoutRequest, http_request: Request) -> dict[str, 
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to create Stripe Checkout session.") from exc
     return {"checkout_url": url}
-
-
-@app.post("/v1/billing/claim")
-def billing_claim(request: ClaimRequest, response: Response, http_request: Request) -> dict[str, str]:
-    _throttle_public_request(http_request, "claim", 10, 60)
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    try:
-        api_key = claim_checkout_key(request.session_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="Unable to verify checkout with Stripe.") from exc
-    return {"api_key": api_key, "warning": "Save this API key securely. If you lose it, use email verification to rotate and receive a replacement."}
 
 
 @app.post("/v1/keys/rotate")
