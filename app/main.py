@@ -8,10 +8,11 @@ import warnings
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from datetime import datetime, timezone, timedelta
 
 import pymupdf as fitz
 import pytesseract
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, Field
@@ -19,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.security import (
     UsageLimitExceeded, create_api_key, get_key_record, init_db, key_usage,
-    reserve_usage,
+    reserve_usage, rotate_api_key, revoke_api_key,
 )
 from app.billing import create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook
 from app.extraction import extract_invoice_fields
@@ -79,6 +80,17 @@ def require_api_key(authorization: str | None = Header(default=None)) -> dict[st
     record = get_key_record(authorization[7:].strip())
     if not record or not record["active"]:
         raise HTTPException(status_code=401, detail="API key is invalid or inactive.")
+    if record.get("subscription_status") == "past_due":
+        started = record.get("past_due_since")
+        if started:
+            try:
+                past_due_at = datetime.fromisoformat(started)
+            except ValueError:
+                past_due_at = datetime.now(timezone.utc)
+            grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
+            if datetime.now(timezone.utc) - past_due_at > timedelta(hours=grace_hours):
+                revoke_api_key(record["id"])
+                raise HTTPException(status_code=402, detail="Payment is overdue. Update your payment method to restore API access.")
     return record
 
 
@@ -102,10 +114,13 @@ def billing_checkout(request: CheckoutRequest) -> dict[str, str]:
     return {"checkout_url": url}
 
 
-@app.get("/v1/billing/claim")
-def billing_claim(session_id: str) -> dict[str, str]:
+@app.post("/v1/billing/claim")
+def billing_claim(request: ClaimRequest, response: Response) -> dict[str, str]:
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     try:
-        api_key = claim_checkout_key(session_id)
+        api_key = claim_checkout_key(request.session_id)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -113,6 +128,21 @@ def billing_claim(session_id: str) -> dict[str, str]:
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to verify checkout with Stripe.") from exc
     return {"api_key": api_key, "warning": "Copy this API key now. It is displayed only once and cannot be recovered."}
+
+
+@app.post("/v1/keys/rotate")
+def api_key_rotate(key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, str]:
+    try:
+        raw_key = rotate_api_key(key_record["id"])
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"api_key": raw_key, "warning": "Your previous key is now invalid. Save this replacement securely."}
+
+
+@app.post("/v1/keys/revoke")
+def api_key_revoke(key_record: dict[str, Any] = Depends(require_billing_key)) -> dict[str, str]:
+    revoke_api_key(key_record["id"])
+    return {"status": "revoked"}
 
 
 @app.post("/v1/billing/portal")
