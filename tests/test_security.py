@@ -47,3 +47,20 @@ def test_protected_api_and_admin_key_creation(tmp_path, monkeypatch):
         assert usage.status_code == 200
         assert usage.json()["used"] == 1
         assert usage.json()["remaining"] == 2
+
+
+def test_per_minute_rate_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "rate.db"))
+    monkeypatch.setenv("API_ADMIN_KEY", "test-admin-secret")
+    monkeypatch.setenv("REQUESTS_PER_MINUTE", "1")
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/admin/api-keys",
+            headers={"X-Admin-Key": "test-admin-secret"},
+            json={"label": "rate limited customer", "monthly_limit": 20},
+        )
+        api_key = created.json()["api_key"]
+        headers = {"Authorization": f"Bearer {api_key}"}
+        payload = {"text": "Supplier LLC\\nInvoice No: A-100\\nDate: 2026-11-20\\nTotal: 20.00"}
+        assert client.post("/v1/extract-text", headers=headers, json=payload).status_code == 200
+        assert client.post("/v1/extract-text", headers=headers, json=payload).status_code == 429
