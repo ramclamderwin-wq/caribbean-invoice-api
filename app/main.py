@@ -11,13 +11,14 @@ from typing import Any
 
 import pymupdf as fitz
 import pytesseract
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageOps, UnidentifiedImageError
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.security import create_api_key, get_key_record, init_db, key_usage, record_usage, requests_in_last_minute
+from app.billing import create_checkout_session, create_portal_session, handle_webhook
 
 APP_NAME = "Invoice Intelligence API"
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
@@ -57,6 +58,11 @@ class CreateKeyRequest(BaseModel):
     monthly_limit: int = Field(default=1000, ge=1, le=1_000_000)
 
 
+class CheckoutRequest(BaseModel):
+    plan: str = Field(pattern=r"^(starter|professional|business)$")
+    email: str = Field(min_length=5, max_length=254, pattern=r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+
+
 def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
@@ -71,6 +77,60 @@ def require_api_key(authorization: str | None = Header(default=None)) -> dict[st
     if requests_in_last_minute(record["id"]) >= requests_per_minute:
         raise HTTPException(status_code=429, detail="Per-minute API rate limit reached. Please retry shortly.")
     return record
+
+
+def require_billing_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
+    record = get_key_record(authorization[7:].strip())
+    if not record:
+        raise HTTPException(status_code=401, detail="API key is invalid.")
+    return record
+
+
+@app.post("/v1/billing/checkout")
+def billing_checkout(
+    request: CheckoutRequest,
+    key_record: dict[str, Any] = Depends(require_billing_key),
+) -> dict[str, str]:
+    try:
+        url = create_checkout_session(key_record, request.plan, request.email)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to create Stripe Checkout session.") from exc
+    return {"checkout_url": url}
+
+
+@app.post("/v1/billing/portal")
+def billing_portal(
+    key_record: dict[str, Any] = Depends(require_billing_key),
+) -> dict[str, str]:
+    try:
+        url = create_portal_session(key_record)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to create Stripe customer portal session.") from exc
+    return {"portal_url": url}
+
+
+@app.post("/v1/billing/webhook")
+async def billing_webhook(
+    request: Request,
+    stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
+) -> dict[str, str]:
+    payload = await request.body()
+    try:
+        return handle_webhook(payload, stripe_signature)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid Stripe webhook signature or payload.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Stripe webhook processing failed.") from exc
 
 
 def _record_request(key_record: dict[str, Any]) -> None:
