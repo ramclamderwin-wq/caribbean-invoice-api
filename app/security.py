@@ -71,7 +71,7 @@ def create_api_key(label: str, monthly_limit: int | None = None) -> tuple[str, d
 
 def provision_checkout_key(session_id: str, email: str, plan: str, customer_id: str,
                            subscription_id: str, monthly_limit: int) -> str | None:
-    raw_key = "iia_live_" + secrets.token_urlsafe(32)
+    raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
     created_at = datetime.now(timezone.utc).isoformat()
     with _connect() as conn:
         try:
