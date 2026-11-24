@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone, timedelta
+import secrets
 from typing import Any
 
 import stripe
 from app.security import (
     apply_stripe_subscription_event, checkout_key_delivery, mark_checkout_email_sent,
-    provision_checkout_key, record_stripe_event,
+    provision_checkout_key, record_stripe_event, get_key_record_by_customer_id,
+    create_recovery_code, consume_recovery_code, rotate_api_key,
 )
-from app.email_delivery import send_api_key_email
+from app.email_delivery import send_api_key_email, send_recovery_code_email
 
 PLAN_PRICE_ENV = {
     "starter": "STRIPE_PRICE_STARTER",
@@ -97,6 +100,45 @@ def create_portal_session(key_record: dict[str, Any]) -> str:
     return str(
         stripe.billing_portal.Session.create(customer=customer_id, return_url=return_url).url
     )
+
+
+def request_api_key_recovery(email: str) -> None:
+    _configure()
+    customers = stripe.Customer.list(email=email, limit=10)
+    for customer in customers.get("data", []):
+        customer_id = str(customer.get("id") or "")
+        record = get_key_record_by_customer_id(customer_id)
+        if not record or not record["active"] or not record.get("subscription_id"):
+            continue
+        subscription = stripe.Subscription.retrieve(record["subscription_id"])
+        status = str(subscription.get("status", "canceled"))
+        if status not in {"active", "trialing", "past_due"}:
+            continue
+        if status == "past_due" and record.get("past_due_since"):
+            started = datetime.fromisoformat(record["past_due_since"])
+            grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
+            if datetime.now(timezone.utc) - started > timedelta(hours=grace_hours):
+                continue
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        create_recovery_code(email, customer_id, code)
+        send_recovery_code_email(email, code)
+        return
+    # Do not disclose whether an email has an account or active subscription.
+
+
+def confirm_api_key_recovery(email: str, code: str) -> None:
+    _configure()
+    customer_id = consume_recovery_code(email, code)
+    if not customer_id:
+        raise ValueError("The recovery code is invalid, expired, or already used.")
+    record = get_key_record_by_customer_id(customer_id)
+    if not record or not record["active"] or not record.get("subscription_id"):
+        raise ValueError("The account is not eligible for API key recovery.")
+    subscription = stripe.Subscription.retrieve(record["subscription_id"])
+    if str(subscription.get("status", "canceled")) not in {"active", "trialing", "past_due"}:
+        raise ValueError("The account is not eligible for API key recovery.")
+    new_key = rotate_api_key(record["id"])
+    send_api_key_email(email, new_key)
 
 
 def _subscription_plan(subscription: Any) -> str | None:
