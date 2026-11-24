@@ -239,8 +239,9 @@ def api_key_revoke(key_record: dict[str, Any] = Depends(require_billing_key)) ->
 
 
 @app.post("/v1/billing/recovery/request")
-def billing_recovery_request(body: RecoveryRequest, http_request: Request) -> dict[str, str]:
+def billing_recovery_request(body: RecoveryRequest, response: Response, http_request: Request) -> dict[str, str]:
     _throttle_public_request(http_request, "recovery_request", 5, 3600)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
     try:
         reserve_public_rate_limit(body.email.lower(), "recovery_email", 3, 3600)
         request_api_key_recovery(body.email.lower())
@@ -248,6 +249,8 @@ def billing_recovery_request(body: RecoveryRequest, http_request: Request) -> di
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to process the recovery request right now.") from exc
     return {"message": "If an eligible subscription exists for that email, a verification code has been sent."}
 
 
@@ -262,6 +265,8 @@ def billing_recovery_confirm(body: RecoveryConfirmRequest, response: Response, h
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to complete key recovery right now.") from exc
     return {"message": "Your API key has been rotated and sent to your verified email address."}
 
 
