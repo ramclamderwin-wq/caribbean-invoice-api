@@ -366,3 +366,45 @@ def test_subscription_plan_checks_all_items_and_rejects_multiple_configured_plan
                 {"price": {"id": "price_professional"}},
             ]},
         })
+
+
+def test_recovery_email_failure_can_retry_same_key_without_second_rotation(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+    import app.billing as billing
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "recovery-retry.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_placeholder")
+    monkeypatch.setenv("FROM_EMAIL", "Invoice API <no-reply@example.com>")
+    init_db()
+    old_key, _ = create_api_key("buyer@example.com", 1000)
+    record = get_key_record(old_key)
+    set_subscription(record["id"], "starter", "active", "cus_recovery_retry", "sub_recovery_retry", 1000)
+
+    codes = []
+    delivered = []
+    monkeypatch.setattr(billing.stripe.Customer, "list", lambda **kwargs: {
+        "data": [{"id": "cus_recovery_retry"}],
+    })
+    monkeypatch.setattr(billing.stripe.Subscription, "retrieve", lambda _id: {"status": "active"})
+    monkeypatch.setattr(billing, "send_recovery_code_email", lambda email, code: codes.append(code))
+
+    def fail_once(email, key):
+        delivered.append(key)
+        if len(delivered) == 1:
+            raise RuntimeError("temporary email outage")
+    monkeypatch.setattr(billing, "send_api_key_email", fail_once)
+
+    billing.request_api_key_recovery("buyer@example.com")
+    code = codes[0]
+    with pytest.raises(RuntimeError, match="temporary email outage"):
+        billing.confirm_api_key_recovery("buyer@example.com", code)
+    pending_key = delivered[0]
+    assert get_key_record(old_key) is None
+    assert get_key_record(pending_key) is not None
+
+    billing.confirm_api_key_recovery("buyer@example.com", code)
+    assert delivered == [pending_key, pending_key]
+    with pytest.raises(ValueError, match="invalid, expired, or already used"):
+        billing.confirm_api_key_recovery("buyer@example.com", "000000")
