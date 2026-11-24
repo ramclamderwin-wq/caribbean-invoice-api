@@ -407,3 +407,80 @@ def test_recovery_email_failure_can_retry_same_key_without_second_rotation(tmp_p
     assert delivered == [pending_key, pending_key]
     with pytest.raises(ValueError, match="invalid, expired, or the account is not eligible"):
         billing.confirm_api_key_recovery("buyer@example.com", "not-the-code")
+
+
+def test_usage_is_counted_in_the_customer_stripe_billing_period(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from app.security import _connect, key_usage, reserve_usage
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "period-usage.db"))
+    init_db()
+    key, _ = create_api_key("period customer", 10)
+    record = get_key_record(key)
+    now = datetime.now(timezone.utc)
+    period_start = (now - timedelta(days=1)).isoformat()
+    period_end = (now + timedelta(days=29)).isoformat()
+    set_subscription(
+        record["id"], "starter", "active", "cus_period", "sub_period", 10,
+        current_period_start=period_start, current_period_end=period_end,
+    )
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO api_usage(api_key_id,used_at) VALUES (?,?)",
+            (record["id"], (now - timedelta(days=2)).isoformat()),
+        )
+        conn.execute(
+            "INSERT INTO api_usage(api_key_id,used_at) VALUES (?,?)",
+            (record["id"], (now - timedelta(hours=1)).isoformat()),
+        )
+    assert key_usage(record["id"], 10)["used"] == 1
+    reserve_usage(record["id"], 10, 100)
+    assert key_usage(record["id"], 10)["used"] == 2
+
+
+def test_refund_webhook_suspends_customer_access(tmp_path, monkeypatch):
+    from app.billing import handle_webhook
+    import app.billing as billing
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "refund.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    init_db()
+    key, _ = create_api_key("refund customer", 100)
+    record = get_key_record(key)
+    set_subscription(record["id"], "starter", "active", "cus_refund", "sub_refund", 100)
+    event = {
+        "id": "evt_refund_1", "created": 900, "type": "charge.refunded",
+        "data": {"object": {"id": "ch_refund", "customer": "cus_refund",
+                            "amount": 1900, "amount_refunded": 1900}},
+    }
+    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: event)
+    result = handle_webhook(b"{}", "valid-signature")
+    assert result["outcome"] == "recorded"
+    updated = get_key_record(key)
+    assert updated["active"] == 0
+    assert updated["subscription_status"] == "refunded"
+
+
+def test_dispute_webhook_suspends_customer_access(tmp_path, monkeypatch):
+    from app.billing import handle_webhook
+    import app.billing as billing
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "dispute.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    init_db()
+    key, _ = create_api_key("dispute customer", 100)
+    record = get_key_record(key)
+    set_subscription(record["id"], "starter", "active", "cus_dispute", "sub_dispute", 100)
+    event = {
+        "id": "evt_dispute_1", "created": 901, "type": "charge.dispute.created",
+        "data": {"object": {"id": "dp_test", "charge": "ch_test"}},
+    }
+    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(billing.stripe.Charge, "retrieve", lambda _charge: {"customer": "cus_dispute"})
+    result = handle_webhook(b"{}", "valid-signature")
+    assert result["outcome"] == "recorded"
+    updated = get_key_record(key)
+    assert updated["active"] == 0
+    assert updated["subscription_status"] == "disputed"
