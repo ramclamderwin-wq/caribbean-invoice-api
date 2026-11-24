@@ -5,3 +5,4 @@ pypdfium2==5.14.0
 Pillow==13.0.0
 pytesseract==0.3.13
 stripe==14.4.2
+cryptography==50.0.2
