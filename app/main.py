@@ -24,7 +24,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.security import (
     UsageLimitExceeded, create_api_key, get_key_record, init_db, key_usage,
-    reserve_usage, reserve_public_rate_limit, rotate_api_key, revoke_api_key,
+    reserve_usage, reserve_public_rate_limit, rotate_api_key, revoke_api_key, database_health_check,
 )
 from app.billing import (
     create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook,
@@ -470,6 +470,7 @@ def dashboard() -> Any:
 @app.post("/v1/admin/api-keys")
 def admin_create_api_key(
     request: CreateKeyRequest,
+    http_request: Request,
     x_admin_key: str | None = Header(default=None),
 ) -> dict[str, Any]:
     admin_secret = os.getenv("API_ADMIN_KEY")
@@ -478,6 +479,7 @@ def admin_create_api_key(
     import hmac
     if not x_admin_key or not hmac.compare_digest(x_admin_key, admin_secret):
         raise HTTPException(status_code=401, detail="Administrator authorization failed.")
+    _throttle_public_request(http_request, "admin_create_key", 10, 3600)
     raw_key, metadata = create_api_key(request.label, request.monthly_limit)
     return {"api_key": raw_key, "warning": "Copy this key now. It cannot be retrieved later.", "customer": metadata}
 
@@ -489,6 +491,8 @@ def usage(key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, An
 
 @app.get("/health")
 async def health() -> dict[str, str]:
+    if not database_health_check():
+        raise HTTPException(status_code=503, detail="Database is unavailable.")
     return {"status": "ok", "service": "quillvora-api"}
 
 
