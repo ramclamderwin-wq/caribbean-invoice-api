@@ -149,19 +149,14 @@ def request_api_key_recovery(email: str) -> None:
 def confirm_api_key_recovery(email: str, code: str) -> None:
     _configure()
     # Validate billing eligibility before consuming the one-time code or rotating credentials.
-    # The key rotation and encrypted pending-delivery record are committed atomically.
-    # If email delivery fails, the same code can retry delivery of the same key.
-    from app.security import prepare_recovery_key, mark_recovery_email_sent
-    customer_id = None
-    # Resolve the matching customer from the latest recovery-code record only after
-    # checking eligible Stripe customers for this email.
+    # Rotation and encrypted pending delivery are committed atomically; retries reuse that key.
     try:
         customers = stripe.Customer.list(email=email, limit=10)
     except Exception as exc:
         raise RuntimeError("Unable to verify the billing account for recovery.") from exc
     for customer in customers.get("data", []):
-        candidate_id = str(customer.get("id") or "")
-        record = get_key_record_by_customer_id(candidate_id)
+        customer_id = str(customer.get("id") or "")
+        record = get_key_record_by_customer_id(customer_id)
         if not record or not record["active"] or not record.get("subscription_id"):
             continue
         subscription = stripe.Subscription.retrieve(record["subscription_id"])
@@ -173,17 +168,13 @@ def confirm_api_key_recovery(email: str, code: str) -> None:
             grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
             if datetime.now(timezone.utc) - started > timedelta(hours=grace_hours):
                 continue
-        customer_id = candidate_id
-        break
-    if not customer_id:
-        raise ValueError("The recovery code is invalid, expired, or the account is not eligible.")
-    record = get_key_record_by_customer_id(customer_id)
-    new_key = prepare_recovery_key(email, code, customer_id, record["id"])
-    if not new_key:
-        raise ValueError("The recovery code is invalid, expired, or already used.")
-    send_api_key_email(email, new_key)
-    mark_recovery_email_sent(email, code)
-
+        new_key = prepare_recovery_key(email, code, customer_id, record["id"])
+        if not new_key:
+            continue
+        send_api_key_email(email, new_key)
+        mark_recovery_email_sent(email, code)
+        return
+    raise ValueError("The recovery code is invalid, expired, or the account is not eligible.")
 
 def _subscription_plan(subscription: Any) -> str | None:
     """Resolve one unambiguous plan from all configured subscription item prices."""
