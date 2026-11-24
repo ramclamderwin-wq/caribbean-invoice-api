@@ -229,3 +229,56 @@ def test_checkout_completed_webhook_emails_same_encrypted_key_once(tmp_path, mon
     assert delivered[0][0] == "buyer@example.com"
     assert delivered[0][1] == delivery["api_key"]
     assert delivery["email_sent_at"] is not None
+
+
+
+def test_lost_key_recovery_uses_email_code_and_rotates_key(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+    import app.billing as billing
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "recovery.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_placeholder")
+    monkeypatch.setenv("FROM_EMAIL", "Invoice API <no-reply@example.com>")
+    init_db()
+    old_key, _ = create_api_key("buyer@example.com", 1000)
+    record = get_key_record(old_key)
+    set_subscription(record["id"], "starter", "active", "cus_recovery_1", "sub_recovery_1", 1000)
+
+    codes = []
+    delivered_keys = []
+    monkeypatch.setattr(billing.stripe.Customer, "list", lambda **kwargs: {
+        "data": [{"id": "cus_recovery_1"}],
+    })
+    monkeypatch.setattr(billing.stripe.Subscription, "retrieve", lambda _id: {"status": "active"})
+    monkeypatch.setattr(billing, "send_recovery_code_email", lambda email, code: codes.append((email, code)))
+    monkeypatch.setattr(billing, "send_api_key_email", lambda email, key: delivered_keys.append((email, key)))
+
+    with TestClient(app) as client:
+        requested = client.post("/v1/billing/recovery/request", json={"email": "buyer@example.com"})
+        assert requested.status_code == 200
+        assert "If an eligible subscription exists" in requested.json()["message"]
+        assert len(codes) == 1
+
+        confirmed = client.post(
+            "/v1/billing/recovery/confirm",
+            json={"email": "buyer@example.com", "code": codes[0][1]},
+        )
+
+    assert confirmed.status_code == 200
+    assert get_key_record(old_key) is None
+    assert len(delivered_keys) == 1
+    assert get_key_record(delivered_keys[0][1]) is not None
+
+
+def test_checkout_is_disabled_without_encrypted_key_and_email_delivery(monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("STRIPE_PRICE_STARTER", "price_test_starter")
+    monkeypatch.setenv("CHECKOUT_SUCCESS_URL", "https://example.com/dashboard")
+    monkeypatch.setenv("CHECKOUT_CANCEL_URL", "https://example.com/dashboard")
+    monkeypatch.delenv("API_KEY_ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.delenv("FROM_EMAIL", raising=False)
+    with pytest.raises(RuntimeError, match="Secure API-key encryption and email delivery"):
+        create_checkout_session("starter", "buyer@example.com")
