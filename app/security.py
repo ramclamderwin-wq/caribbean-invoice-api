@@ -73,16 +73,16 @@ def provision_checkout_key(session_id: str, email: str, plan: str, customer_id: 
                            subscription_id: str, monthly_limit: int) -> str | None:
     raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
     created_at = datetime.now(timezone.utc).isoformat()
-    with _connect() as conn:
-        try:
+    try:
+        with _connect() as conn:
             cursor = conn.execute(
                 """INSERT INTO api_keys(label,key_hash,monthly_limit,active,created_at,plan,
                    stripe_customer_id,subscription_id) VALUES (?,?,?,?,?,?,?,?)""",
                 (email, hash_key(raw_key), monthly_limit, 1, created_at, plan, customer_id, subscription_id))
             conn.execute("INSERT INTO checkout_claims(checkout_session_id,api_key_id,claimed_at) VALUES (?,?,?)",
                          (session_id, cursor.lastrowid, created_at))
-        except sqlite3.IntegrityError:
-            return None
+    except sqlite3.IntegrityError:
+        return None
     return raw_key
 
 
