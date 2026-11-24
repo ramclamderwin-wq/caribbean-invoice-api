@@ -1,10 +1,10 @@
 # Quillvora — Stripe Sandbox test plan
 
-Status: **prepared, not executed**. No Stripe account was accessed, no credentials were read, and no payment or subscription was created.
+Status: **CI verified; Stripe end-to-end tests not yet executable**. A read-only inspection of the connected Divine Group Holdings LLC Stripe test-mode account found three active products and monthly prices. No credentials were read, no Stripe objects were changed, and no payment or subscription was created.
 
 ## Safe environment
 
-Use a dedicated Stripe **Sandbox** for this integration (not Live mode and preferably not the account-wide shared test mode). Keep sandbox credentials separate from production credentials.
+Use a dedicated Stripe **Sandbox** for this integration if available. The connected Divine Group Holdings LLC account currently exposes test mode; the read-only inventory below is from test mode, not Live mode. Keep test and production credentials separate.
 
 Required server environment variables for this repository:
 
@@ -20,19 +20,29 @@ Do not paste keys into chat, GitHub, issue comments, screenshots, or source file
 
 ## Before the first Checkout test
 
-1. In Stripe Dashboard, create a dedicated Sandbox and confirm the dashboard is visibly in that sandbox.
-2. Create three separate Products: Quillvora Starter, Quillvora Professional, and Quillvora Business. Create monthly recurring Prices for each. Record the three Price IDs.
-3. Confirm prices match the current intended offer in the repository docs: Starter $19/month (1,000 pages), Professional $49/month (5,000 pages), Business $149/month (20,000 pages). Treat these as proposed prices until the owner approves them; don't activate live prices.
-4. Configure the sandbox webhook destination to the staging API's `/v1/billing/webhook`. Subscribe only to events handled by the application:
+1. The connected test-mode account already has the three active Quillvora products and monthly prices listed below. Do not create duplicates.
+2. Confirm the owner approves the proposed $19/$49/$149 monthly prices and the included page allowances before using Checkout. These are test-mode prices only; do not create or activate Live prices.
+3. Correct the product descriptions in Stripe Dashboard from “requests per month” to “pages per month” before customer-facing checkout; the API meters pages, so “requests” is inaccurate. This plan records the mismatch but does not change Stripe objects.
+4. Configure the test-mode webhook destination to the staging API's `/v1/billing/webhook`. No test-mode webhook endpoint currently exists. Subscribe only to events handled by the application:
    - `checkout.session.completed`
    - `checkout.session.async_payment_succeeded` (confirm handler behavior before relying on delayed payment methods)
    - `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
    - `invoice.paid`, `invoice.payment_failed`
    - `charge.refunded`
    - `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`
-5. Store the sandbox signing secret in `STRIPE_WEBHOOK_SECRET`. Verify a harmless test webhook reaches the endpoint and is signature-checked.
+5. Store the test-mode signing secret in `STRIPE_WEBHOOK_SECRET`. Verify a harmless test webhook reaches the endpoint and is signature-checked.
 6. Verify email delivery to a controlled test mailbox before using Checkout. Confirm the message contains the API key only in the intended email and that application logs do not contain it.
 7. Confirm the staging service and database are disposable and isolated. Do not deploy or provision paid infrastructure without separate approval.
+
+## Read-only test-mode inventory (2026-11-24)
+
+| Plan | Product ID | Price ID | Test price |
+|---|---|---|---:|
+| Starter | `prod_VgXCrxASbcQvOr` | `price_1UfA89KqMzLsvG4ZAFDh3MJU` | $19/month |
+| Professional | `prod_VgXClEK0tjdJTA` | `price_1UfA8MKqMzLsvG4Zhn16WocE` | $49/month |
+| Business | `prod_VgXC8DdMmVCO5j` | `price_1UfA8OKqMzLsvG4ZAM90zuJE` | $149/month |
+
+All three are active monthly USD recurring prices in test mode. No webhook endpoints were found. Existing Stripe product descriptions say “requests per month”; the API's metering unit is pages, so those descriptions must be corrected before customer-facing checkout.
 
 ## Execution checklist
 
@@ -77,8 +87,8 @@ Use Stripe's official test payment methods and test clocks / test event tools wh
 
 ## Current blockers / limitations
 
-- The connected Stripe account has not been inspected and no Sandbox credentials are available in this repository context.
-- No sandbox Products, Prices, webhook endpoint, verified sender, or staging API have been configured here.
+- No separate Stripe Sandbox was confirmed; only the connected account's test mode was inspected.
+- No test-mode webhook endpoint exists. No staging API URL, webhook signing secret, test-mode secret key, Resend credentials, verified sender, or isolated staging database has been configured in this workspace.
 - The billing module now creates a scoped `StripeClient` per operation and uses the `client.v1` service namespace; webhook signature construction is performed through that client. Automated tests use a test-only adapter and do not contact Stripe.
 - The Checkout handler currently uses synchronous Checkout Session creation. Confirm webhook fulfillment for asynchronous payment success and test only payment methods whose lifecycle the handler explicitly supports.
 - Tax is intentionally not enabled. Before collecting from US or other jurisdictions, determine registration/collection obligations and complete Stripe Tax setup; enabling automatic tax without active registrations does not by itself make tax collection compliant.
