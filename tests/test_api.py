@@ -102,6 +102,40 @@ Total: 54.00""")
     assert body["source"]["ocr_used"] is False
 
 
+def test_pdf_usage_is_metered_by_page_count(client):
+    headers = _auth_headers("pdf-page-metering", monthly_limit=2)
+    payload = _make_pdf(
+        "ACME SUPPLIES\nInvoice No: PDF-20\nDate: 2026-11-20\n"
+        "Currency: USD\nSubtotal: 50.00\nTax: 4.00\nTotal: 54.00",
+        pages=2,
+    )
+    response = client.post(
+        "/v1/extract-file",
+        headers=headers,
+        files={"file": ("two-pages.pdf", payload, "application/pdf")},
+    )
+    assert response.status_code == 200
+    assert response.json()["source"]["pages"] == 2
+    usage = client.get("/v1/usage", headers=headers)
+    assert usage.json()["used"] == 2
+
+
+def test_pdf_page_quota_is_checked_before_processing(client):
+    headers = _auth_headers("pdf-page-quota", monthly_limit=1)
+    payload = _make_pdf(
+        "ACME SUPPLIES\nInvoice No: PDF-21\nDate: 2026-11-20\nTotal: 54.00",
+        pages=2,
+    )
+    response = client.post(
+        "/v1/extract-file",
+        headers=headers,
+        files={"file": ("two-pages.pdf", payload, "application/pdf")},
+    )
+    assert response.status_code == 429
+    usage = client.get("/v1/usage", headers=headers)
+    assert usage.json()["used"] == 0
+
+
 def test_extract_image_upload_uses_ocr(client, monkeypatch):
     image = Image.new("RGB", (320, 160), "white")
     buffer = io.BytesIO()
