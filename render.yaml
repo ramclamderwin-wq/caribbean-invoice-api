@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: invoice-intelligence-api
+    name: invosentry-api
     runtime: docker
     plan: starter
     healthCheckPath: /health
     autoDeploy: true
     disk:
-      name: invoice-api-data
+      name: invosentry-data
       mountPath: /var/data
       sizeGB: 1
     envVars:
