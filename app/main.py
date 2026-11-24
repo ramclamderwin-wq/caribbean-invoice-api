@@ -35,6 +35,7 @@ from app.extraction import extract_invoice_fields
 APP_NAME = "Quillvora API"
 logger = logging.getLogger("invoice_api")
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
+MAX_WEBHOOK_BODY_BYTES = int(os.getenv("MAX_WEBHOOK_BODY_BYTES", str(1024 * 1024)))
 MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "20"))
 MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "25000000"))
 MAX_PDF_PAGE_PIXELS = int(os.getenv("MAX_PDF_PAGE_PIXELS", "16000000"))
@@ -68,15 +69,17 @@ class UploadBodySizeLimitMiddleware:
         self.max_bytes = max_bytes
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope.get("path") not in {"/v1/extract-file", "/v1/extract-pdf"}:
+        path = scope.get("path")
+        if scope["type"] != "http" or path not in {"/v1/extract-file", "/v1/extract-pdf", "/v1/billing/webhook"}:
             await self.application(scope, receive, send)
             return
 
+        body_limit = MAX_WEBHOOK_BODY_BYTES if path == "/v1/billing/webhook" else self.max_bytes
         headers = dict(scope.get("headers", []))
         content_length = headers.get(b"content-length")
         if content_length:
             try:
-                if int(content_length) > self.max_bytes:
+                if int(content_length) > body_limit:
                     await self._reject(send)
                     return
             except ValueError:
@@ -93,7 +96,7 @@ class UploadBodySizeLimitMiddleware:
             message = await receive()
             if message["type"] == "http.request":
                 total += len(message.get("body", b""))
-                if total > self.max_bytes:
+                if total > body_limit:
                     oversized = True
                     return {"type": "http.request", "body": b"", "more_body": False}
             return message
@@ -107,7 +110,7 @@ class UploadBodySizeLimitMiddleware:
             await self._reject(send)
 
     async def _reject(self, send):
-        body = b'{"detail":"Upload request body exceeds the configured size limit."}'
+        body = b'{"detail":"Request body exceeds the configured size limit."}'
         await send({
             "type": "http.response.start",
             "status": 413,
