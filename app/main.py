@@ -94,14 +94,20 @@ def require_billing_key(authorization: str | None = Header(default=None)) -> dic
 
 @app.post("/v1/billing/checkout")
 def billing_checkout(request: CheckoutRequest) -> dict[str, str]:
-    """Public signup endpoint; no existing API key is required."""
+    """Public signup endpoint; new customers do not need an existing API key."""
     try:
         url = create_checkout_session(request.plan, request.email)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to create Stripe Checkout session.") from exc
     return {"checkout_url": url}
+
+
+class ClaimRequest(BaseModel):
+    session_id: str = Field(min_length=10, max_length=255)
 
 
 @app.post("/v1/billing/claim")
