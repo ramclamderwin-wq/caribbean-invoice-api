@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import io
 import os
-from contextlib import asynccontextmanager
 import re
 import shutil
-from decimal import Decimal, InvalidOperation
+import warnings
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -14,10 +14,13 @@ import pytesseract
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageOps, UnidentifiedImageError
-from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
-from app.security import create_api_key, get_key_record, init_db, key_usage, record_usage, requests_in_last_minute
+from app.security import (
+    UsageLimitExceeded, create_api_key, get_key_record, init_db, key_usage,
+    reserve_usage,
+)
 from app.billing import create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook
 from app.extraction import extract_invoice_fields
 
@@ -25,9 +28,15 @@ APP_NAME = "Quillvora API"
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "20"))
 MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "25000000"))
+MAX_PDF_PAGE_PIXELS = int(os.getenv("MAX_PDF_PAGE_PIXELS", "16000000"))
+MAX_OCR_PAGES = int(os.getenv("MAX_OCR_PAGES", "5"))
+OCR_TIMEOUT_SECONDS = int(os.getenv("OCR_TIMEOUT_SECONDS", "30"))
 TESSERACT_CMD = os.getenv("TESSERACT_CMD")
 if TESSERACT_CMD:
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -39,7 +48,7 @@ app = FastAPI(
     title=APP_NAME,
     lifespan=lifespan,
     description="Quillvora extracts structured invoice data from text, PDFs, scanned PDFs, and invoice photos. Verify every result against the original.",
-    version="0.2.0",
+    version="0.3.0",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -67,16 +76,9 @@ class CheckoutRequest(BaseModel):
 def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
-    raw_key = authorization[7:].strip()
-    record = get_key_record(raw_key)
+    record = get_key_record(authorization[7:].strip())
     if not record or not record["active"]:
         raise HTTPException(status_code=401, detail="API key is invalid or inactive.")
-    usage = key_usage(record["id"], record["monthly_limit"])
-    if usage["used"] >= usage["monthly_limit"]:
-        raise HTTPException(status_code=429, detail="Monthly API usage limit reached.")
-    requests_per_minute = int(os.getenv("REQUESTS_PER_MINUTE", "60"))
-    if requests_in_last_minute(record["id"]) >= requests_per_minute:
-        raise HTTPException(status_code=429, detail="Per-minute API rate limit reached. Please retry shortly.")
     return record
 
 
@@ -145,11 +147,16 @@ async def billing_webhook(
 
 
 def _record_request(key_record: dict[str, Any]) -> None:
-    record_usage(key_record["id"])
+    rpm = int(os.getenv("REQUESTS_PER_MINUTE", "60"))
+    try:
+        reserve_usage(key_record["id"], key_record["monthly_limit"], rpm)
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
 
 
 def _require_tesseract() -> None:
-    if not shutil.which(pytesseract.pytesseract.tesseract_cmd):
+    command = pytesseract.pytesseract.tesseract_cmd
+    if not shutil.which(command):
         raise HTTPException(
             status_code=503,
             detail="OCR is unavailable. Install the Tesseract OCR engine and English language data, then restart the API.",
@@ -159,13 +166,18 @@ def _require_tesseract() -> None:
 def _ocr_image(image: Image.Image) -> str:
     _require_tesseract()
     image = ImageOps.exif_transpose(image)
-    if image.width * image.height > MAX_IMAGE_PIXELS:
+    if image.width <= 0 or image.height <= 0 or image.width * image.height > MAX_IMAGE_PIXELS:
         raise HTTPException(status_code=413, detail="Image dimensions are too large.")
     try:
-        return pytesseract.image_to_string(image.convert("RGB"), lang="eng")
+        return pytesseract.image_to_string(
+            image.convert("RGB"), lang="eng", timeout=OCR_TIMEOUT_SECONDS
+        )
     except pytesseract.TesseractNotFoundError:
         _require_tesseract()
         raise
+    except RuntimeError as exc:
+        # pytesseract raises RuntimeError when its subprocess times out.
+        raise HTTPException(status_code=408, detail="OCR processing exceeded its time limit.") from exc
 
 
 def _extract_pdf(data: bytes) -> tuple[str, bool, int]:
@@ -173,19 +185,66 @@ def _extract_pdf(data: bytes) -> tuple[str, bool, int]:
         document = fitz.open(stream=data, filetype="pdf")
     except Exception as exc:
         raise HTTPException(status_code=400, detail="The uploaded PDF is invalid or unreadable.") from exc
-    if document.page_count > MAX_PDF_PAGES:
-        raise HTTPException(status_code=413, detail=f"PDF exceeds the {MAX_PDF_PAGES}-page limit.")
-    chunks: list[str] = []
-    used_ocr = False
-    for page in document:
-        page_text = page.get_text("text").strip()
-        if len(page_text) < 20:
-            _require_tesseract()
-            pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-            page_text = _ocr_image(Image.open(io.BytesIO(pixmap.tobytes("png"))))
-            used_ocr = True
-        chunks.append(page_text)
-    return "\n".join(chunks), used_ocr, document.page_count
+    try:
+        if document.page_count > MAX_PDF_PAGES:
+            raise HTTPException(status_code=413, detail=f"PDF exceeds the {MAX_PDF_PAGES}-page limit.")
+        chunks: list[str] = []
+        used_ocr = False
+        ocr_pages = 0
+        for page in document:
+            page_text = page.get_text("text").strip()
+            if len(page_text) < 20:
+                ocr_pages += 1
+                if ocr_pages > MAX_OCR_PAGES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"PDF exceeds the {MAX_OCR_PAGES}-page OCR limit.",
+                    )
+                rect = page.rect
+                estimated_pixels = max(1, int(rect.width * 2)) * max(1, int(rect.height * 2))
+                if estimated_pixels > MAX_PDF_PAGE_PIXELS:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="A PDF page is too large to rasterise safely.",
+                    )
+                _require_tesseract()
+                pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                if pixmap.width * pixmap.height > MAX_PDF_PAGE_PIXELS:
+                    raise HTTPException(status_code=413, detail="A PDF page exceeds the OCR pixel limit.")
+                with Image.open(io.BytesIO(pixmap.tobytes("png"))) as page_image:
+                    page_text = _ocr_image(page_image)
+                used_ocr = True
+            chunks.append(page_text)
+        return "\n".join(chunks), used_ocr, document.page_count
+    finally:
+        document.close()
+
+
+def _process_file(data: bytes, suffix: str, filename: str) -> tuple[str, bool, int, str]:
+    if suffix == ".pdf":
+        if not data.startswith(b"%PDF"):
+            raise HTTPException(status_code=400, detail="The file does not appear to be a valid PDF.")
+        text, ocr_used, page_count = _extract_pdf(data)
+        return text, ocr_used, page_count, "pdf"
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            image = Image.open(io.BytesIO(data))
+            if image.width <= 0 or image.height <= 0 or image.width * image.height > MAX_IMAGE_PIXELS:
+                raise HTTPException(status_code=413, detail="Image dimensions are too large.")
+            image.verify()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            image = Image.open(io.BytesIO(data))
+            if image.width * image.height > MAX_IMAGE_PIXELS:
+                raise HTTPException(status_code=413, detail="Image dimensions are too large.")
+            text = _ocr_image(image)
+    except HTTPException:
+        raise
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise HTTPException(status_code=400, detail="The uploaded image is invalid, unsafe, or unreadable.") from exc
+    return text, True, 1, "image"
 
 
 @app.get("/")
@@ -194,7 +253,8 @@ def root() -> dict[str, str]:
 
 
 @app.get("/dashboard", include_in_schema=False)
-def dashboard() -> FileResponse:
+def dashboard() -> Any:
+    from fastapi.responses import FileResponse
     return FileResponse(Path(__file__).parent / "static" / "index.html")
 
 
@@ -225,14 +285,17 @@ def health() -> dict[str, str]:
 
 @app.post("/v1/extract-text")
 def extract_text(request: TextRequest, key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
+    _record_request(key_record)
     result = extract_invoice_fields(request.text)
     result["source"] = {"type": "text", "ocr_used": False}
-    _record_request(key_record)
     return result
 
 
 @app.post("/v1/extract-file")
 async def extract_file(file: UploadFile = File(...), key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
+    # Reserve quota before reading or decoding untrusted content. Failed and
+    # malformed attempts are metered too, so expensive failures are not free.
+    _record_request(key_record)
     filename = Path(file.filename or "upload").name
     suffix = Path(filename).suffix.lower()
     allowed = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"}
@@ -244,26 +307,14 @@ async def extract_file(file: UploadFile = File(...), key_record: dict[str, Any] 
     if not data:
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
-    if suffix == ".pdf":
-        if not data.startswith(b"%PDF"):
-            raise HTTPException(status_code=400, detail="The file does not appear to be a valid PDF.")
-        text, ocr_used, page_count = _extract_pdf(data)
-        source_type = "pdf"
-    else:
-        try:
-            image = Image.open(io.BytesIO(data))
-            image.verify()
-            image = Image.open(io.BytesIO(data))
-        except (UnidentifiedImageError, OSError) as exc:
-            raise HTTPException(status_code=400, detail="The uploaded image is invalid or unreadable.") from exc
-        text = _ocr_image(image)
-        ocr_used, page_count, source_type = True, 1, "image"
-
+    # All PDF parsing, image decoding and OCR run off the ASGI event loop.
+    text, ocr_used, page_count, source_type = await run_in_threadpool(
+        _process_file, data, suffix, filename
+    )
     if not text.strip():
         raise HTTPException(status_code=422, detail="No readable text was found. Try a clearer scan or higher-resolution photo.")
     result = extract_invoice_fields(text)
     result["source"] = {"type": source_type, "filename": filename, "ocr_used": ocr_used, "pages": page_count}
-    _record_request(key_record)
     return result
 
 
