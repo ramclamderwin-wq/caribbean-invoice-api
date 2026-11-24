@@ -1,3 +1,5 @@
+import pytest
+
 from app.security import create_api_key, get_key_record, init_db, key_usage, record_usage
 
 
