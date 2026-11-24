@@ -187,8 +187,8 @@ def require_billing_key(authorization: str | None = Header(default=None)) -> dic
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
     record = get_key_record(authorization[7:].strip())
-    if not record:
-        raise HTTPException(status_code=401, detail="API key is invalid.")
+    if not record or not record["active"]:
+        raise HTTPException(status_code=401, detail="API key is invalid or inactive.")
     return record
 
 
