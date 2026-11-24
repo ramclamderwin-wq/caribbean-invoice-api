@@ -545,3 +545,22 @@ def test_account_deletion_cancels_subscription_and_removes_local_records(tmp_pat
     assert canceled == ["sub_delete"]
     assert response.json()["status"] == "deleted"
     assert get_key_record(key) is None
+
+
+def test_checkout_email_delivery_claim_is_atomic_and_retryable(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+    from app.security import (
+        provision_checkout_key, claim_checkout_email_delivery,
+        release_checkout_email_delivery, mark_checkout_email_sent,
+    )
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "email-lease.db"))
+    monkeypatch.setenv("API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    init_db()
+    provision_checkout_key("cs_lease_1", "lease@example.com", "starter",
+                           "cus_lease", "sub_lease", 100)
+    assert claim_checkout_email_delivery("cs_lease_1") is True
+    assert claim_checkout_email_delivery("cs_lease_1") is False
+    release_checkout_email_delivery("cs_lease_1")
+    assert claim_checkout_email_delivery("cs_lease_1") is True
+    mark_checkout_email_sent("cs_lease_1")
+    assert claim_checkout_email_delivery("cs_lease_1") is False
