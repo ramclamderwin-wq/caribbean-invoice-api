@@ -102,3 +102,13 @@ def key_usage(key_id: int, monthly_limit: int) -> dict[str, int]:
         ).fetchone()
     used = int(row["used"])
     return {"used": used, "monthly_limit": monthly_limit, "remaining": max(0, monthly_limit - used)}
+
+def requests_in_last_minute(key_id: int) -> int:
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS used FROM api_usage WHERE api_key_id = ? AND used_at >= ?",
+            (key_id, cutoff),
+        ).fetchone()
+    return int(row["used"])
