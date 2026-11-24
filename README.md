@@ -67,7 +67,8 @@ The response contains `fields`, `confidence`, `confidence_type`, `warnings`, `re
 
 ## Configuration
 
-- `MAX_UPLOAD_BYTES`: maximum upload size (default 15 MiB).
+- `MAX_UPLOAD_BYTES`: maximum invoice file size (default 15 MiB).
+- `MAX_WEBHOOK_BODY_BYTES`: maximum Stripe webhook request body (default 1 MiB).
 - `MAX_PDF_PAGES`: maximum PDF pages (default 20).
 - `MAX_IMAGE_PIXELS`: maximum image pixels (default 25 million).
 - `MAX_PDF_PAGE_PIXELS`: maximum rasterized pixels per scanned PDF page (default 16 million).
