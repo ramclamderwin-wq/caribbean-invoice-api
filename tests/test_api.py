@@ -177,3 +177,15 @@ def test_security_headers_are_present(client):
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+
+
+
+def test_oversized_request_is_rejected_before_multipart_parsing(client):
+    headers = _auth_headers("oversized-request")
+    headers["Content-Length"] = str(16 * 1024 * 1024)
+    response = client.post(
+        "/v1/extract-file",
+        headers=headers,
+        files={"file": ("invoice.png", b"tiny", "image/png")},
+    )
+    assert response.status_code == 413
