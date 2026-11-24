@@ -79,7 +79,7 @@ Use Stripe's official test payment methods and test clocks / test event tools wh
 
 - The connected Stripe account has not been inspected and no Sandbox credentials are available in this repository context.
 - No sandbox Products, Prices, webhook endpoint, verified sender, or staging API have been configured here.
-- The repository's current billing module uses the Stripe Python SDK module-level `stripe.api_key` configuration pattern. Stripe's current integration guidance deprecates that global pattern in favor of an instantiated `StripeClient`; review and migrate that safely before treating the integration as current.
+- The billing module now creates a scoped `StripeClient` per operation and uses the `client.v1` service namespace; webhook signature construction is performed through that client. Automated tests use a test-only adapter and do not contact Stripe.
 - The Checkout handler currently uses synchronous Checkout Session creation. Confirm webhook fulfillment for asynchronous payment success and test only payment methods whose lifecycle the handler explicitly supports.
 - Tax is intentionally not enabled. Before collecting from US or other jurisdictions, determine registration/collection obligations and complete Stripe Tax setup; enabling automatic tax without active registrations does not by itself make tax collection compliant.
 - The test suite's mocked Stripe tests are not a substitute for this live-to-sandbox integration test.
