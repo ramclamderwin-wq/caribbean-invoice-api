@@ -28,7 +28,7 @@ jobs:
         run: docker build -t invoice-api-ci .
       - name: Smoke-test the production Docker image
         run: |
-          docker run -d --name invoice-api-smoke -p 8000:8000 --tmpfs /var/data:uid=10001,gid=10001 invoice-api-ci
+          docker run -d --name invoice-api-smoke -p 8000:8000 -e DATABASE_PATH=/var/data/invoice_api.db --tmpfs /var/data:uid=10001,gid=10001 invoice-api-ci
           python - <<'PY'
           import time
           import urllib.error
