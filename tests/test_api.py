@@ -197,3 +197,16 @@ def test_oversized_stripe_webhook_body_is_rejected_before_reading(client):
     response = client.post("/v1/billing/webhook", content=payload)
     assert response.status_code == 413
     assert response.json()["detail"] == "Request body exceeds the configured size limit."
+
+
+def test_dashboard_has_content_security_policy(client):
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    assert "default-src 'self'" in response.headers["content-security-policy"]
+
+
+def test_health_returns_unavailable_when_database_is_unwritable(client, monkeypatch):
+    import app.main as main
+    monkeypatch.setattr(main, "database_health_check", lambda: False)
+    response = client.get("/health")
+    assert response.status_code == 503
