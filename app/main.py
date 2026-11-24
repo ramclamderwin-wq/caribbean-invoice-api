@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.security import create_api_key, get_key_record, init_db, key_usage, record_usage, requests_in_last_minute
 from app.billing import create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook
+from app.extraction import extract_invoice_fields
 
 APP_NAME = "InvoSentry API"
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
@@ -145,110 +146,6 @@ async def billing_webhook(
 
 def _record_request(key_record: dict[str, Any]) -> None:
     record_usage(key_record["id"])
-
-
-def _clean_text(value: str) -> str:
-    value = value.replace("\x00", " ")
-    value = re.sub(r"[ \t]+", " ", value)
-    value = re.sub(r"\n{3,}", "\n\n", value)
-    return value.strip()
-
-
-def _first_match(patterns: list[str], text: str) -> str | None:
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
-        if match:
-            return match.group(1).strip(" \t:#")
-    return None
-
-
-def _money(value: str | None) -> str | None:
-    if not value:
-        return None
-    cleaned = value.strip().replace(",", "")
-    cleaned = re.sub(r"^[A-Z]{3}\s*", "", cleaned, flags=re.IGNORECASE)
-    cleaned = cleaned.replace("$", "").replace("BZD", "").replace("USD", "").strip()
-    match = re.search(r"-?\d+(?:\.\d{1,4})?", cleaned)
-    if not match:
-        return None
-    try:
-        return str(Decimal(match.group(0)).quantize(Decimal("0.01")))
-    except InvalidOperation:
-        return None
-
-
-def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
-    text = _clean_text(raw_text)
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    invoice_number = _first_match(
-        [r"(?:invoice\s*(?:number|no\.?|#|num(?:ber)?)|inv\b\s*#?)\s*[:#\-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"],
-        text,
-    )
-    invoice_date = _first_match(
-        [
-            r"(?:invoice\s*date|date\s*of\s*invoice|date)\s*[:#\-]?\s*((?:\d{4}[-/]\d{1,2}[-/]\d{1,2})|(?:\d{1,2}[-/]\d{1,2}[-/]\d{2,4})|(?:[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}))"
-        ],
-        text,
-    )
-    supplier = None
-    for line in lines[:8]:
-        if re.search(r"\b(invoice|receipt|statement|tax invoice)\b", line, re.I):
-            continue
-        if re.search(r"\b(invoice\s*(number|no|date)|date\s*:)", line, re.I):
-            continue
-        if len(line) >= 2:
-            supplier = line[:160]
-            break
-
-    def amount(labels: str) -> str | None:
-        value = _first_match(
-            [
-                rf"\b(?:{labels})\b\s*[:\-]?\s*(?:BZD|USD|BZ\$|\$)?\s*([(\-]?\s*\d[\d,]*(?:\.\d{{1,4}})?\s*\)?)"
-            ],
-            text,
-        )
-        return _money(value)
-
-    subtotal = amount(r"sub[\s-]?total|net\s+amount|amount\s+before\s+tax")
-    tax = amount(r"tax|gst|vat")
-    total = amount(r"grand\s+total|total\s+due|amount\s+due|balance\s+due|invoice\s+total|total")
-
-    currency = _first_match(
-        [r"(?:currency)\s*[:\-]?\s*([A-Z]{3})", r"\b(BZD|USD|BZ\$)\b"],
-        text,
-    )
-    if currency:
-        currency = {"BZ$": "BZD"}.get(currency.upper(), currency.upper())
-
-    fields = {
-        "supplier_name": supplier,
-        "invoice_number": invoice_number,
-        "invoice_date": invoice_date,
-        "currency": currency,
-        "subtotal": subtotal,
-        "tax": tax,
-        "total": total,
-    }
-    warnings: list[str] = []
-    if not invoice_number:
-        warnings.append("Invoice number was not confidently identified.")
-    if not invoice_date:
-        warnings.append("Invoice date was not confidently identified.")
-    if not total:
-        warnings.append("Invoice total was not confidently identified.")
-    if subtotal and tax and total:
-        try:
-            if abs((Decimal(subtotal) + Decimal(tax)) - Decimal(total)) > Decimal("0.02"):
-                warnings.append("Subtotal plus tax does not equal the extracted total; check discounts, fees, rounding, and the original invoice.")
-        except InvalidOperation:
-            warnings.append("Could not validate the invoice arithmetic.")
-
-    return {
-        "fields": fields,
-        "confidence": {key: (0.90 if value is not None else 0.0) for key, value in fields.items()},
-        "warnings": warnings,
-        "review_required": True,
-    }
 
 
 def _require_tesseract() -> None:

@@ -63,7 +63,7 @@ curl -X POST http://127.0.0.1:8000/v1/extract-file \
   -F "file=@invoice-scan.pdf"
 ```
 
-The response contains `fields`, `confidence`, `warnings`, `review_required`, and `source` metadata. Confidence values are rule-match indicators, not statistically calibrated probabilities.
+The response contains `fields`, `confidence`, `confidence_type`, `warnings`, `review_required`, `extraction_metadata`, and `source` metadata. The confidence values are deliberately labeled heuristic presence indicators, not statistically calibrated probabilities or accuracy guarantees. Every invoice result requires review against the source document.
 
 ## Configuration
 
