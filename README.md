@@ -169,4 +169,4 @@ Required environment variables:
 
 Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion/pause/resume and invoice payment failed/paid events before testing subscription lifecycle. Configure Resend with a verified sender domain before enabling Checkout. Checkout key email delivery depends on the webhook and will retry on email-provider failure. Stripe Tax remains disabled until the company determines its registration and collection obligations.
 
-The customer self-signup code is under test and must pass CI and be deployed/configured before it is advertised as a working public service.
+Checkout remains disabled until the Resend sender, encryption key, Stripe secrets, and webhook endpoint are configured and tested. No Render deployment or live Stripe test has been performed.
