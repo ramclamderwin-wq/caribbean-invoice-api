@@ -189,7 +189,7 @@ def test_total_tax_and_tax_id_are_not_misread_as_money():
 def test_trailing_punctuation_and_first_amount_are_handled():
     result = extract_invoice_fields(
         "Example Supplier\nInvoice No: A-91\nDate: 2026-04-03\n"
-        "Total: 108.00.\nPaid: 100.00"
+        "Total: 108.00, Paid: 100.00."
     )
     assert result["fields"]["total"] == "108.00"
 
