@@ -114,6 +114,17 @@ def claim_checkout_key(session_id: str) -> str:
     )
 
 
+def cancel_customer_subscriptions(customer_id: str) -> None:
+    """Cancel all non-terminal subscriptions before local customer data is erased."""
+    _configure()
+    subscriptions = stripe.Subscription.list(customer=customer_id, status="all", limit=100)
+    for subscription in subscriptions.get("data", []):
+        status = str(subscription.get("status", ""))
+        subscription_id = str(subscription.get("id") or "")
+        if subscription_id and status not in {"canceled", "incomplete_expired"}:
+            stripe.Subscription.cancel(subscription_id)
+
+
 def create_portal_session(key_record: dict[str, Any]) -> str:
     _configure()
     customer_id = key_record.get("stripe_customer_id")
