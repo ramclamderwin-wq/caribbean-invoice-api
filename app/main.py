@@ -23,7 +23,10 @@ from app.security import (
     UsageLimitExceeded, create_api_key, get_key_record, init_db, key_usage,
     reserve_usage, reserve_public_rate_limit, rotate_api_key, revoke_api_key,
 )
-from app.billing import create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook
+from app.billing import (
+    create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook,
+    request_api_key_recovery, confirm_api_key_recovery,
+)
 from app.extraction import extract_invoice_fields
 
 APP_NAME = "Quillvora API"
@@ -144,6 +147,15 @@ class ClaimRequest(BaseModel):
     session_id: str = Field(min_length=10, max_length=255)
 
 
+class RecoveryRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=254, pattern=r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+
+
+class RecoveryConfirmRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=254, pattern=r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
+    code: str = Field(pattern=r"^\\d{6}$")
+
+
 def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
@@ -224,6 +236,33 @@ def api_key_rotate(key_record: dict[str, Any] = Depends(require_api_key)) -> dic
 def api_key_revoke(key_record: dict[str, Any] = Depends(require_billing_key)) -> dict[str, str]:
     revoke_api_key(key_record["id"])
     return {"status": "revoked"}
+
+
+@app.post("/v1/billing/recovery/request")
+def billing_recovery_request(body: RecoveryRequest, http_request: Request) -> dict[str, str]:
+    _throttle_public_request(http_request, "recovery_request", 5, 3600)
+    try:
+        reserve_public_rate_limit(body.email.lower(), "recovery_email", 3, 3600)
+        request_api_key_recovery(body.email.lower())
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"message": "If an eligible subscription exists for that email, a verification code has been sent."}
+
+
+@app.post("/v1/billing/recovery/confirm")
+def billing_recovery_confirm(body: RecoveryConfirmRequest, response: Response, http_request: Request) -> dict[str, str]:
+    _throttle_public_request(http_request, "recovery_confirm", 10, 600)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    response.headers["Pragma"] = "no-cache"
+    try:
+        confirm_api_key_recovery(body.email.lower(), body.code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"message": "Your API key has been rotated and sent to your verified email address."}
 
 
 @app.post("/v1/billing/portal")
