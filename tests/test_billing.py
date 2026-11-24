@@ -524,3 +524,24 @@ def test_revoked_api_key_cannot_use_billing_key_endpoints(tmp_path, monkeypatch)
         second = client.post("/v1/keys/revoke", headers=headers)
     assert first.status_code == 200
     assert second.status_code == 401
+
+
+def test_account_deletion_cancels_subscription_and_removes_local_records(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "account-delete.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    init_db()
+    key, _ = create_api_key("delete-me@example.com", 100)
+    record = get_key_record(key)
+    set_subscription(record["id"], "starter", "active", "cus_delete", "sub_delete", 100)
+    import app.billing as billing
+    canceled = []
+    monkeypatch.setattr(billing.stripe.Subscription, "list", lambda **kwargs: {
+        "data": [{"id": "sub_delete", "status": "active"}],
+    })
+    monkeypatch.setattr(billing.stripe.Subscription, "cancel", lambda sub_id: canceled.append(sub_id))
+    with TestClient(app) as client:
+        response = client.delete("/v1/account", headers={"Authorization": f"Bearer {key}"})
+    assert response.status_code == 200
+    assert canceled == ["sub_delete"]
+    assert response.json()["status"] == "deleted"
+    assert get_key_record(key) is None
