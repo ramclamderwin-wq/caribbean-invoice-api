@@ -362,6 +362,10 @@ def prepare_recovery_key(email: str, code: str, customer_id: str, key_id: int) -
         ).fetchone()
         if not row or str(row["customer_id"]) != customer_id or int(row["attempts"]) >= 5:
             return None
+        if not hmac.compare_digest(row["code_hash"], supplied_hash):
+            if not row["used_at"]:
+                conn.execute("UPDATE api_key_recovery_codes SET attempts=attempts+1 WHERE id=?", (row["id"],))
+            return None
         # A retry after a mail outage reuses the exact same key without another rotation.
         if row["used_at"]:
             if not row["encrypted_api_key"] or row["delivered_at"]:
