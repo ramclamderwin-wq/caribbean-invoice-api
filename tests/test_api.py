@@ -162,7 +162,7 @@ def test_oversized_pdf_page_is_rejected_before_rasterization(client, monkeypatch
     import app.main as main
 
     monkeypatch.setattr(main, "MAX_PDF_PAGE_PIXELS", 1_000_000)
-    payload = _make_pdf(page_size=(1000, 1000))
+    payload = _make_pdf("x", page_size=(1000, 1000))
     response = client.post(
         "/v1/extract-file",
         headers=_auth_headers("oversized-page"),
