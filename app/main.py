@@ -21,7 +21,7 @@ from app.security import create_api_key, get_key_record, init_db, key_usage, rec
 from app.billing import create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook
 from app.extraction import extract_invoice_fields
 
-APP_NAME = "Trelliqo API"
+APP_NAME = "Quillvora API"
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "20"))
 MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "25000000"))
@@ -38,7 +38,7 @@ async def lifespan(application: FastAPI):
 app = FastAPI(
     title=APP_NAME,
     lifespan=lifespan,
-    description="Trelliqo extracts structured invoice data from text, PDFs, scanned PDFs, and invoice photos. Verify every result against the original.",
+    description="Quillvora extracts structured invoice data from text, PDFs, scanned PDFs, and invoice photos. Verify every result against the original.",
     version="0.2.0",
 )
 app.add_middleware(
@@ -220,7 +220,7 @@ def usage(key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, An
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "trelliqo-api"}
+    return {"status": "ok", "service": "quillvora-api"}
 
 
 @app.post("/v1/extract-text")
