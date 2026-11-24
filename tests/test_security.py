@@ -138,3 +138,15 @@ def test_api_key_rotation_preserves_usage_and_invalidates_old_key(tmp_path, monk
     assert new is not None
     assert new["id"] == old["id"]
     assert key_usage(new["id"], new["monthly_limit"])["used"] == 1
+
+
+
+def test_public_rate_limit_rejects_excess_requests(tmp_path, monkeypatch):
+    from app.security import UsageLimitExceeded, reserve_public_rate_limit
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "public-rate.db"))
+    init_db()
+    reserve_public_rate_limit("203.0.113.10", "checkout", 2, 3600)
+    reserve_public_rate_limit("203.0.113.10", "checkout", 2, 3600)
+    with pytest.raises(UsageLimitExceeded):
+        reserve_public_rate_limit("203.0.113.10", "checkout", 2, 3600)
