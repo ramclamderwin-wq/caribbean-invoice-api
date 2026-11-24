@@ -189,3 +189,11 @@ def test_oversized_request_is_rejected_before_multipart_parsing(client):
         files={"file": ("invoice.png", b"tiny", "image/png")},
     )
     assert response.status_code == 413
+
+
+
+def test_oversized_stripe_webhook_body_is_rejected_before_reading(client):
+    payload = b"x" * (1024 * 1024 + 1)
+    response = client.post("/v1/billing/webhook", content=payload)
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Request body exceeds the configured size limit."
