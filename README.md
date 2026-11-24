@@ -85,19 +85,19 @@ A `render.yaml` is included for a simple Render Docker deployment. The customer-
 ## Development tests
 
 ```bash
-pip install pytest httpx
+pip install -r requirements-dev.txt
 pytest -q
 ```
 
-A test suite is included in `tests/test_extraction.py`.
+A test suite is included in `tests/`. Tests use synthetic invoices only; they do not establish real-world extraction accuracy.
 
 ## Next milestones before selling access
 
 1. Test OCR and extraction against permissioned real invoices from multiple industries, countries, layouts, and currencies.
 2. Improve extraction for line items, discounts, delivery charges, sales taxes, VAT/GST, and varied date formats.
-3. Add API-key authentication, per-customer usage limits, and key rotation.
+3. Continue hardening API-key recovery, account ownership verification, and per-customer usage limits.
 4. Add privacy and retention controls, customer data deletion, audit logs, and secure secret management.
-5. Add subscription billing only after authentication and usage metering are reliable.
+5. Complete checkout key email delivery and recovery before enabling public subscription sales.
 6. Add an optional AI extraction provider behind a configurable interface, with strict privacy controls and validation.
 
 Do not put API secrets or customer invoices in source control. Do not use extracted data to automatically pay or approve invoices.
@@ -138,11 +138,11 @@ The included Blueprint config uses a paid always-on service and a persistent dis
 Stripe Checkout is designed for public customer signup. New customers do not need an API key before choosing a plan.
 
 - `POST /v1/billing/checkout` — public endpoint accepting a plan and email, then returning a hosted Stripe Checkout URL.
-- `GET /v1/billing/claim?session_id=...` — verifies the completed Stripe subscription with Stripe and issues one API key once. The API key is stored as a hash and cannot be retrieved after the one-time claim.
+- `POST /v1/billing/claim` — accepts `{"session_id":"..."}` in a JSON body, verifies the completed subscription, and issues one API key once. The response is marked `no-store`; the session ID remains a bearer claim token and must not be shared.
 - `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an API key linked to a Stripe customer.
-- `POST /v1/billing/webhook` — verifies Stripe signatures and updates linked API-key access when a subscription changes or payment fails.
+- `POST /v1/billing/webhook` — verifies Stripe signatures, deduplicates events, ignores older subscription events, maps current Stripe Price IDs to plan quotas, and applies a configurable payment-failure grace period.
 
-The dashboard at `/dashboard` contains plan selection and a one-time API-key claim screen. For now, the key is displayed on the post-checkout page; an email delivery provider has not yet been configured. Customers must copy and securely save the key when it appears.
+The dashboard at `/dashboard` contains plan selection and a one-time API-key claim screen. Email delivery and lost-key recovery are not yet implemented, so customers must complete the browser claim and securely save the key. This remains a blocker for public paid launch.
 
 Planned subscription tiers (confirm the matching Stripe Sandbox products and prices before launch):
 - Starter: $19/month, 1,000 API requests.
@@ -155,6 +155,6 @@ Required environment variables:
 - `CHECKOUT_SUCCESS_URL`, `CHECKOUT_CANCEL_URL`, `CUSTOMER_PORTAL_RETURN_URL`.
 - Optional quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
 
-Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion and invoice payment failure events before testing subscription lifecycle. Stripe Tax remains disabled until the company determines its registration and collection obligations.
+Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion/pause/resume and invoice payment failed/paid events before testing subscription lifecycle. Checkout-completed key delivery by webhook is not implemented yet. Stripe Tax remains disabled until the company determines its registration and collection obligations.
 
 The customer self-signup code is under test and must pass CI and be deployed/configured before it is advertised as a working public service.
