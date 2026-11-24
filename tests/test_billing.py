@@ -153,16 +153,13 @@ def test_failed_payment_webhook_keeps_access_during_grace_period(tmp_path, monke
 
 
 
-def test_claim_endpoint_uses_post_and_no_store_headers(tmp_path, monkeypatch):
-    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "claim-endpoint.db"))
-    import app.main as main
-    monkeypatch.setattr(main, "claim_checkout_key", lambda _session_id: "iia_test_example")
+def test_browser_claim_endpoint_is_retired():
     with TestClient(app) as client:
-        response = client.post("/v1/billing/claim", json={"session_id": "cs_test_session_123"})
-        assert response.status_code == 200
-        assert response.json()["api_key"] == "iia_test_example"
-        assert response.headers["cache-control"].startswith("no-store")
-        assert client.get("/v1/billing/claim?session_id=cs_test_session_123").status_code == 405
+        response = client.post(
+            "/v1/billing/claim",
+            json={"session_id": "cs_test_session_123"},
+        )
+    assert response.status_code == 404
 
 
 def test_api_key_rotation_endpoint_returns_new_key(tmp_path, monkeypatch):
