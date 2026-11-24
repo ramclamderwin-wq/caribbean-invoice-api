@@ -24,11 +24,11 @@ from starlette.concurrency import run_in_threadpool
 
 from app.security import (
     UsageLimitExceeded, create_api_key, get_key_record, init_db, key_usage,
-    reserve_usage, reserve_public_rate_limit, rotate_api_key, revoke_api_key, database_health_check,
+    reserve_usage, reserve_public_rate_limit, rotate_api_key, revoke_api_key, database_health_check, delete_customer_local_data,
 )
 from app.billing import (
     create_checkout_session, claim_checkout_key, create_portal_session, handle_webhook,
-    request_api_key_recovery, confirm_api_key_recovery,
+    request_api_key_recovery, confirm_api_key_recovery, cancel_customer_subscriptions,
 )
 from app.extraction import extract_invoice_fields
 
@@ -186,6 +186,16 @@ def require_api_key(authorization: str | None = Header(default=None)) -> dict[st
     return record
 
 
+def require_deletion_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Allow a known key to request erasure even if it has already been revoked."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
+    record = get_key_record(authorization[7:].strip())
+    if not record:
+        raise HTTPException(status_code=401, detail="API key is invalid.")
+    return record
+
+
 def require_billing_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
@@ -278,6 +288,26 @@ def billing_recovery_confirm(body: RecoveryConfirmRequest, response: Response, h
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to complete key recovery right now.") from exc
     return {"message": "Your API key has been rotated and sent to your verified email address."}
+
+
+@app.delete("/v1/account")
+def delete_account(key_record: dict[str, Any] = Depends(require_deletion_key)) -> dict[str, Any]:
+    customer_id = key_record.get("stripe_customer_id")
+    if customer_id:
+        try:
+            cancel_customer_subscriptions(str(customer_id))
+        except Exception as exc:
+            logger.exception("Stripe subscription cancellation failed during account deletion.")
+            raise HTTPException(
+                status_code=503,
+                detail="Unable to cancel the billing subscription. No local account data was deleted; retry or contact support.",
+            ) from exc
+    deleted = delete_customer_local_data(int(key_record["id"]))
+    return {
+        "status": "deleted",
+        "local_api_records_deleted": deleted,
+        "billing_records": "Stripe retains payment and invoice records as required by its legal obligations.",
+    }
 
 
 @app.post("/v1/billing/portal")
