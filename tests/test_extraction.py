@@ -168,10 +168,10 @@ def test_ambiguous_numeric_date_is_not_guessed():
 
 def test_spanish_invoice_labels_are_supported():
     result = extract_invoice_fields(
-        "Comercial del Caribe\nFactura No: FC-100\nFecha de factura: 2026-05-06\n"
+        "Comercial del Caribe\nFactura No: FC-100\nFecha de factura: 20 de noviembre de 2026\n"
         "Moneda: BZD\nSubtotal: 100.00\nIVA: 12.50\nTotal a pagar: 112.50"
     )
     assert result["fields"]["invoice_number"] == "FC-100"
-    assert result["fields"]["invoice_date"] == "2026-05-06"
+    assert result["fields"]["invoice_date"] == "2026-11-20"
     assert result["fields"]["tax"] == "12.50"
     assert result["fields"]["total"] == "112.50"
