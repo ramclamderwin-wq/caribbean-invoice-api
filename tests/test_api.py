@@ -210,3 +210,25 @@ def test_health_returns_unavailable_when_database_is_unwritable(client, monkeypa
     monkeypatch.setattr(main, "database_health_check", lambda: False)
     response = client.get("/health")
     assert response.status_code == 503
+
+
+def test_ocr_timeout_is_reported_as_timeout(monkeypatch):
+    import app.main as main
+    from fastapi import HTTPException
+    image = Image.new("RGB", (20, 20), "white")
+    monkeypatch.setattr(main, "_require_tesseract", lambda: None)
+    monkeypatch.setattr(main.pytesseract, "image_to_string", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("Tesseract process timeout")))
+    with pytest.raises(HTTPException) as exc:
+        main._ocr_image(image)
+    assert exc.value.status_code == 408
+
+
+def test_non_timeout_ocr_runtime_error_is_not_misreported(monkeypatch):
+    import app.main as main
+    from fastapi import HTTPException
+    image = Image.new("RGB", (20, 20), "white")
+    monkeypatch.setattr(main, "_require_tesseract", lambda: None)
+    monkeypatch.setattr(main.pytesseract, "image_to_string", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("image pipeline failed")))
+    with pytest.raises(HTTPException) as exc:
+        main._ocr_image(image)
+    assert exc.value.status_code == 500
