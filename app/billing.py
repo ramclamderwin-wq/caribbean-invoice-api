@@ -30,11 +30,12 @@ DEFAULT_LIMITS = {"starter": 1000, "professional": 5000, "business": 20000}
 logger = logging.getLogger(__name__)
 
 
-def _configure() -> None:
+def _configure() -> stripe.StripeClient:
     secret = os.getenv("STRIPE_SECRET_KEY")
     if not secret:
         raise RuntimeError("Stripe billing is not configured.")
-    stripe.api_key = secret
+    # Keep credentials scoped to this client; do not mutate SDK global state.
+    return stripe.StripeClient(secret, max_network_retries=2)
 
 
 def _monthly_limit(plan: str) -> int:
@@ -71,7 +72,7 @@ def _stripe_period_value(subscription: Any, field: str) -> str | None:
 
 
 def create_checkout_session(plan: str, email: str) -> str:
-    _configure()
+    client = _configure()
     if not all(os.getenv(name) for name in ("API_KEY_ENCRYPTION_KEY", "RESEND_API_KEY", "FROM_EMAIL")):
         raise RuntimeError("Secure API-key encryption and email delivery must be configured before accepting paid signups.")
     try:
@@ -85,22 +86,22 @@ def create_checkout_session(plan: str, email: str) -> str:
     cancel_url = os.getenv("CHECKOUT_CANCEL_URL")
     if not success_url or not cancel_url:
         raise RuntimeError("Checkout success and cancel URLs are not configured.")
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        customer_email=email,
-        line_items=[{"price": price_id, "quantity": 1}],
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata={"plan": plan, "signup_email": email},
-        subscription_data={"metadata": {"plan": plan, "signup_email": email}},
-    )
+    session = client.v1.checkout.sessions.create(params={
+        "mode": "subscription",
+        "customer_email": email,
+        "line_items": [{"price": price_id, "quantity": 1}],
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+        "metadata": {"plan": plan, "signup_email": email},
+        "subscription_data": {"metadata": {"plan": plan, "signup_email": email}},
+    })
     return str(session.url)
 
 
 def claim_checkout_key(session_id: str) -> str:
     """Legacy browser claim. Kept temporarily for existing checkout sessions."""
-    _configure()
-    session = stripe.checkout.Session.retrieve(session_id)
+    client = _configure()
+    session = client.v1.checkout.sessions.retrieve(session_id)
     if session.get("status") != "complete" or session.get("mode") != "subscription":
         raise ValueError("Checkout has not been completed.")
     if session.get("payment_status") not in {"paid", "no_payment_required"}:
@@ -116,7 +117,7 @@ def claim_checkout_key(session_id: str) -> str:
     subscription_id = session.get("subscription")
     if plan not in PLAN_PRICE_ENV or not email or not customer_id or not subscription_id:
         raise ValueError("The completed checkout is missing required subscription details.")
-    subscription = stripe.Subscription.retrieve(subscription_id)
+    subscription = client.v1.subscriptions.retrieve(subscription_id)
     status = str(subscription.get("status", "incomplete"))
     if status not in {"active", "trialing"}:
         raise ValueError("The subscription is not active. Please contact support.")
@@ -130,17 +131,17 @@ def claim_checkout_key(session_id: str) -> str:
 
 def cancel_customer_subscriptions(customer_id: str) -> None:
     """Cancel all non-terminal subscriptions before local customer data is erased."""
-    _configure()
-    subscriptions = stripe.Subscription.list(customer=customer_id, status="all", limit=100)
+    client = _configure()
+    subscriptions = client.v1.subscriptions.list(params={"customer": customer_id, "status": "all", "limit": 100})
     for subscription in subscriptions.get("data", []):
         status = str(subscription.get("status", ""))
         subscription_id = str(subscription.get("id") or "")
         if subscription_id and status not in {"canceled", "incomplete_expired"}:
-            stripe.Subscription.cancel(subscription_id)
+            client.v1.subscriptions.cancel(subscription_id)
 
 
 def create_portal_session(key_record: dict[str, Any]) -> str:
-    _configure()
+    client = _configure()
     customer_id = key_record.get("stripe_customer_id")
     if not customer_id:
         raise ValueError("No Stripe customer is associated with this API key.")
@@ -148,12 +149,12 @@ def create_portal_session(key_record: dict[str, Any]) -> str:
     if not return_url:
         raise RuntimeError("Customer portal return URL is not configured.")
     return str(
-        stripe.billing_portal.Session.create(customer=customer_id, return_url=return_url).url
+        client.v1.billing_portal.sessions.create(params={"customer": customer_id, "return_url": return_url}).url
     )
 
 
 def request_api_key_recovery(email: str) -> None:
-    _configure()
+    client = _configure()
     if not all(os.getenv(name) for name in ("API_KEY_ENCRYPTION_KEY", "RESEND_API_KEY", "FROM_EMAIL")):
         raise RuntimeError("Secure key encryption and email delivery are not configured.")
     try:
@@ -161,7 +162,7 @@ def request_api_key_recovery(email: str) -> None:
     except (ValueError, TypeError, KeyError) as exc:
         raise RuntimeError("API_KEY_ENCRYPTION_KEY is invalid.") from exc
     try:
-        customers = stripe.Customer.list(email=email, limit=10)
+        customers = client.v1.customers.list(params={"email": email, "limit": 10})
     except Exception:
         logger.warning("Stripe customer lookup failed during account recovery.")
         return
@@ -170,7 +171,7 @@ def request_api_key_recovery(email: str) -> None:
         record = get_key_record_by_customer_id(customer_id)
         if not record or not record["active"] or not record.get("subscription_id"):
             continue
-        subscription = stripe.Subscription.retrieve(record["subscription_id"])
+        subscription = client.v1.subscriptions.retrieve(record["subscription_id"])
         status = str(subscription.get("status", "canceled"))
         if status not in {"active", "trialing", "past_due"}:
             continue
@@ -187,11 +188,11 @@ def request_api_key_recovery(email: str) -> None:
 
 
 def confirm_api_key_recovery(email: str, code: str) -> None:
-    _configure()
+    client = _configure()
     # Validate billing eligibility before consuming the one-time code or rotating credentials.
     # Rotation and encrypted pending delivery are committed atomically; retries reuse that key.
     try:
-        customers = stripe.Customer.list(email=email, limit=10)
+        customers = client.v1.customers.list(params={"email": email, "limit": 10})
     except Exception as exc:
         raise RuntimeError("Unable to verify the billing account for recovery.") from exc
     for customer in customers.get("data", []):
@@ -199,7 +200,7 @@ def confirm_api_key_recovery(email: str, code: str) -> None:
         record = get_key_record_by_customer_id(customer_id)
         if not record or not record["active"] or not record.get("subscription_id"):
             continue
-        subscription = stripe.Subscription.retrieve(record["subscription_id"])
+        subscription = client.v1.subscriptions.retrieve(record["subscription_id"])
         status = str(subscription.get("status", "canceled"))
         if status not in {"active", "trialing", "past_due"}:
             continue
@@ -253,7 +254,7 @@ def _apply_subscription_event(event: Any, event_type: str, subscription_id: str)
     try:
         # Always reconcile against Stripe's current object. A delayed webhook
         # must not overwrite a newer subscription state with an old snapshot.
-        current = stripe.Subscription.retrieve(subscription_id)
+        current = _configure().v1.subscriptions.retrieve(subscription_id)
     except Exception:
         if event_type == "customer.subscription.deleted":
             current = event_obj
@@ -297,7 +298,7 @@ def _deliver_checkout_key(session: Any) -> str:
     )
     if not session_id or not subscription_id or not customer_id or not email:
         raise ValueError("Completed Checkout session is missing customer or subscription details.")
-    current = stripe.Subscription.retrieve(str(subscription_id))
+    current = _configure().v1.subscriptions.retrieve(str(subscription_id))
     status = str(current.get("status", "incomplete"))
     if status not in {"active", "trialing"}:
         raise RuntimeError("The Stripe subscription is not active yet; key delivery will retry.")
@@ -332,7 +333,7 @@ def _suspend_charge_customer(charge_or_dispute: Any, reason: str) -> int:
         if isinstance(charge_id, dict):
             customer_id = charge_id.get("customer")
         elif charge_id:
-            charge = stripe.Charge.retrieve(str(charge_id))
+            charge = _configure().v1.charges.retrieve(str(charge_id))
             customer_id = charge.get("customer")
     if not customer_id:
         logger.error("Cannot suspend access for %s event: Stripe customer ID is missing.", reason)
@@ -341,14 +342,14 @@ def _suspend_charge_customer(charge_or_dispute: Any, reason: str) -> int:
 
 
 def handle_webhook(payload: bytes, signature: str | None) -> dict[str, str]:
-    _configure()
+    client = _configure()
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
     if not webhook_secret:
         raise RuntimeError("Stripe webhook signing secret is not configured.")
     if not signature:
         raise ValueError("Missing Stripe-Signature header.")
     try:
-        event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
+        event = client.construct_event(payload, signature, webhook_secret)
     except Exception as exc:
         if exc.__class__.__name__ == "SignatureVerificationError":
             raise ValueError("Invalid Stripe webhook signature.") from exc
