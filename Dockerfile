@@ -14,5 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY THIRD_PARTY_NOTICES.md .
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /var/data \
+    && chown -R appuser:appuser /app /var/data
+USER appuser
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
