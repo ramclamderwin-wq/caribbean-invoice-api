@@ -44,7 +44,7 @@ def _normalise_amount(value: str | None) -> str | None:
     original = value.strip()
     negative = original.startswith("(") and original.endswith(")")
     value = original.strip("()").strip()
-    value = re.sub(r"^(?:BZ\$|USD|BZD|EUR|GBP|CAD|AUD|[$€£])\s*", "", value, flags=re.I)
+    value = re.sub(r"^(?:BZ\$|USD|BZD|EUR|GBP|CAD|AUD|NZD|MXN|JPY|CHF|INR|SGD|HKD|BRL|COP|GTQ|HNL|CRC|PAB|DOP|JMD|TTD|[$€£])\s*", "", value, flags=re.I)
     value = value.replace(" ", "").replace("'", "")
     if not re.fullmatch(r"-?\d[\d.,]*", value):
         return None
