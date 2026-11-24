@@ -17,6 +17,10 @@ def test_public_checkout_does_not_require_an_api_key(monkeypatch):
     monkeypatch.setenv("STRIPE_PRICE_STARTER", "price_test_starter")
     monkeypatch.setenv("CHECKOUT_SUCCESS_URL", "https://example.com/dashboard")
     monkeypatch.setenv("CHECKOUT_CANCEL_URL", "https://example.com/dashboard")
+    from cryptography.fernet import Fernet
+    monkeypatch.setenv("API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_placeholder")
+    monkeypatch.setenv("FROM_EMAIL", "Invoice API <no-reply@example.com>")
     import app.billing as billing
     class FakeSession:
         url = "https://checkout.stripe.com/test-session"
@@ -32,6 +36,8 @@ def test_checkout_key_is_created_once_and_linked_to_subscription(tmp_path, monke
     init_db()
     import app.billing as billing
     monkeypatch.setenv("STRIPE_SECRET_KEY","sk_test_example")
+    from cryptography.fernet import Fernet
+    monkeypatch.setenv("API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode())
     monkeypatch.setattr(billing.stripe.checkout.Session,"retrieve",lambda session_id: {
         "status":"complete","mode":"subscription","payment_status":"paid",
         "metadata":{"plan":"professional","signup_email":"buyer@example.com"},
@@ -173,3 +179,53 @@ def test_api_key_rotation_endpoint_returns_new_key(tmp_path, monkeypatch):
     assert new_key != raw_key
     assert get_key_record(raw_key) is None
     assert get_key_record(new_key) is not None
+
+
+
+def test_checkout_completed_webhook_emails_same_encrypted_key_once(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+    from app.billing import handle_webhook
+    from app.security import checkout_key_delivery
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "checkout-webhook.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    monkeypatch.setenv("API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_placeholder")
+    monkeypatch.setenv("FROM_EMAIL", "Invoice API <no-reply@example.com>")
+    init_db()
+
+    event = {
+        "id": "evt_checkout_completed_1",
+        "created": 400,
+        "type": "checkout.session.completed",
+        "data": {"object": {
+            "id": "cs_checkout_email_1",
+            "status": "complete",
+            "mode": "subscription",
+            "payment_status": "paid",
+            "metadata": {"plan": "starter", "signup_email": "buyer@example.com"},
+            "customer_details": {"email": "buyer@example.com"},
+            "customer": "cus_email_1",
+            "subscription": "sub_email_1",
+        }},
+    }
+    import app.billing as billing
+    delivered = []
+    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: event)
+    monkeypatch.setattr(billing.stripe.Subscription, "retrieve", lambda _id: {
+        "id": "sub_email_1", "customer": "cus_email_1", "status": "active",
+        "metadata": {"plan": "starter"}, "items": {"data": []},
+    })
+    monkeypatch.setattr(billing, "send_api_key_email", lambda email, key: delivered.append((email, key)))
+
+    first = handle_webhook(b"{}", "valid-signature")
+    duplicate = handle_webhook(b"{}", "valid-signature")
+    delivery = checkout_key_delivery("cs_checkout_email_1")
+
+    assert first["outcome"] == "email_delivered"
+    assert duplicate["outcome"] == "email_delivered"
+    assert len(delivered) == 1
+    assert delivered[0][0] == "buyer@example.com"
+    assert delivered[0][1] == delivery["api_key"]
+    assert delivery["email_sent_at"] is not None
