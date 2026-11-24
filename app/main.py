@@ -372,8 +372,12 @@ def _ocr_image(image: Image.Image) -> str:
         _require_tesseract()
         raise
     except RuntimeError as exc:
-        # pytesseract raises RuntimeError when its subprocess times out.
-        raise HTTPException(status_code=408, detail="OCR processing exceeded its time limit.") from exc
+        # pytesseract uses RuntimeError for timeouts; do not mislabel unrelated
+        # image/OCR failures as a timeout.
+        if "timeout" in str(exc).lower():
+            raise HTTPException(status_code=408, detail="OCR processing exceeded its time limit.") from exc
+        logger.exception("OCR engine failed for an image.")
+        raise HTTPException(status_code=500, detail="OCR processing failed.") from exc
 
 
 def _extract_pdf(data: bytes) -> tuple[str, bool, int]:
