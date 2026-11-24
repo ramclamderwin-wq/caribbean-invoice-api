@@ -6,7 +6,7 @@ from typing import Any
 
 # Deliberately conservative, layout-tolerant rules. This is deterministic
 # extraction, not an AI model; all outputs require verification against source.
-_AMOUNT = r"(?:\(?\s*-?\s*(?:[A-Z]{3}\s*)?(?:[$€£]\s*)?\d[\d.,' ]*(?:\d{1,4})?\s*\)?)"
+_AMOUNT = r"(?:\(?\s*-?\s*(?:[A-Z]{3}\s*)?(?:BZ\$\s*)?(?:[$€£]\s*)?\d[\d.,' ]*(?:\d{1,4})?\s*\)?)"
 _DATE = (
     r"(\d{4}[-/]\d{1,2}[-/]\d{1,2}|"
     r"\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|"
@@ -81,7 +81,7 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
 
     invoice_number = _first_match([
-        r"\b(?:invoice\s*(?:number|no\.?|#|num(?:ber)?)|inv\s*(?:no\.?|#)?)\s*[:#\-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"
+        r"\b(?:invoice\s*(?:number|no\.?|#|num(?:ber)?)|inv\s*(?:no\.?|#))\s*[:#\-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"
     ], text)
     invoice_date = _first_match([
         rf"\b(?:invoice\s*date|date\s*of\s*invoice|date)\s*[:#\-]?\s*{_DATE}"
