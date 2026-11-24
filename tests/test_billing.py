@@ -61,10 +61,13 @@ def test_subscription_activates_api_key_and_sets_plan_quota(tmp_path, monkeypatc
     assert updated["subscription_id"] == "sub_test_123"
 
 
-def test_past_due_subscription_disables_api_key(tmp_path, monkeypatch):
+def test_past_due_subscription_enters_grace_period(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "billing.db"))
     init_db()
     raw_key, _ = create_api_key("billing customer", 1000)
     record = get_key_record(raw_key)
     set_subscription(record["id"],"starter","past_due","cus_test_456","sub_test_456",1000)
-    assert get_key_record(raw_key)["active"] == 0
+    updated = get_key_record(raw_key)
+    assert updated["active"] == 1
+    assert updated["subscription_status"] == "past_due"
+    assert updated["past_due_since"] is not None
