@@ -85,7 +85,7 @@ def test_confidence_is_not_presented_as_probability():
     result = extract_invoice_fields(
         "ACME LTD\nInvoice No: A-4\nDate: 2026-02-02\nTotal: 20.00"
     )
-    assert result["confidence_type"] == "heuristic_presence_indicator_not_probability"
+    assert result["confidence_type"] == "not_available_not_calibrated"
     assert set(result["confidence"]) == set(result["fields"])
     assert all(score is None for score in result["confidence"].values())
 
