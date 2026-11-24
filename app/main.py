@@ -10,10 +10,13 @@ from typing import Any
 
 import fitz
 import pytesseract
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageOps, UnidentifiedImageError
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+
+from app.security import create_api_key, get_key_record, init_db, key_usage, record_usage
 
 APP_NAME = "Invoice Intelligence API"
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
@@ -39,6 +42,33 @@ app.add_middleware(
 
 class TextRequest(BaseModel):
     text: str = Field(min_length=1, max_length=200_000)
+
+
+class CreateKeyRequest(BaseModel):
+    label: str = Field(min_length=2, max_length=100)
+    monthly_limit: int = Field(default=1000, ge=1, le=1_000_000)
+
+
+@app.on_event("startup")
+def startup() -> None:
+    init_db()
+
+
+def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
+    raw_key = authorization[7:].strip()
+    record = get_key_record(raw_key)
+    if not record or not record["active"]:
+        raise HTTPException(status_code=401, detail="API key is invalid or inactive.")
+    usage = key_usage(record["id"], record["monthly_limit"])
+    if usage["used"] >= usage["monthly_limit"]:
+        raise HTTPException(status_code=429, detail="Monthly API usage limit reached.")
+    return record
+
+
+def _record_request(key_record: dict[str, Any]) -> None:
+    record_usage(key_record["id"])
 
 
 def _clean_text(value: str) -> str:
@@ -187,7 +217,32 @@ def _extract_pdf(data: bytes) -> tuple[str, bool, int]:
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"name": APP_NAME, "version": "0.2.0", "docs": "/docs", "health": "/health"}
+    return {"name": APP_NAME, "version": "0.3.0", "dashboard": "/dashboard", "docs": "/docs", "health": "/health"}
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard() -> FileResponse:
+    return FileResponse(Path(__file__).parent / "static" / "index.html")
+
+
+@app.post("/v1/admin/api-keys")
+def admin_create_api_key(
+    request: CreateKeyRequest,
+    x_admin_key: str | None = Header(default=None),
+) -> dict[str, Any]:
+    admin_secret = os.getenv("API_ADMIN_KEY")
+    if not admin_secret:
+        raise HTTPException(status_code=503, detail="API key administration is not configured.")
+    import hmac
+    if not x_admin_key or not hmac.compare_digest(x_admin_key, admin_secret):
+        raise HTTPException(status_code=401, detail="Administrator authorization failed.")
+    raw_key, metadata = create_api_key(request.label, request.monthly_limit)
+    return {"api_key": raw_key, "warning": "Copy this key now. It cannot be retrieved later.", "customer": metadata}
+
+
+@app.get("/v1/usage")
+def usage(key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
+    return key_usage(key_record["id"], key_record["monthly_limit"])
 
 
 @app.get("/health")
@@ -196,14 +251,15 @@ def health() -> dict[str, str]:
 
 
 @app.post("/v1/extract-text")
-def extract_text(request: TextRequest) -> dict[str, Any]:
+def extract_text(request: TextRequest, key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
     result = extract_invoice_fields(request.text)
     result["source"] = {"type": "text", "ocr_used": False}
+    _record_request(key_record)
     return result
 
 
 @app.post("/v1/extract-file")
-async def extract_file(file: UploadFile = File(...)) -> dict[str, Any]:
+async def extract_file(file: UploadFile = File(...), key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
     filename = Path(file.filename or "upload").name
     suffix = Path(filename).suffix.lower()
     allowed = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"}
@@ -234,9 +290,10 @@ async def extract_file(file: UploadFile = File(...)) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="No readable text was found. Try a clearer scan or higher-resolution photo.")
     result = extract_invoice_fields(text)
     result["source"] = {"type": source_type, "filename": filename, "ocr_used": ocr_used, "pages": page_count}
+    _record_request(key_record)
     return result
 
 
 @app.post("/v1/extract-pdf", include_in_schema=False)
-async def extract_pdf_legacy(file: UploadFile = File(...)) -> dict[str, Any]:
-    return await extract_file(file)
+async def extract_pdf_legacy(file: UploadFile = File(...), key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
+    return await extract_file(file, key_record)
