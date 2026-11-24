@@ -169,3 +169,11 @@ def test_oversized_pdf_page_is_rejected_before_rasterization(client, monkeypatch
         files={"file": ("oversized.pdf", payload, "application/pdf")},
     )
     assert response.status_code == 413
+
+
+
+def test_security_headers_are_present(client):
+    response = client.get("/health")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
