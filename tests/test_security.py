@@ -64,3 +64,27 @@ def test_per_minute_rate_limit(tmp_path, monkeypatch):
         payload = {"text": "Supplier LLC\\nInvoice No: A-100\\nDate: 2026-11-20\\nTotal: 20.00"}
         assert client.post("/v1/extract-text", headers=headers, json=payload).status_code == 200
         assert client.post("/v1/extract-text", headers=headers, json=payload).status_code == 429
+
+
+
+def test_atomic_quota_reservation_never_exceeds_limit_under_concurrency(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.security import UsageLimitExceeded, reserve_usage
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "concurrent.db"))
+    init_db()
+    raw_key, _ = create_api_key("concurrent customer", 5)
+    record = get_key_record(raw_key)
+
+    def attempt():
+        try:
+            reserve_usage(record["id"], 5, 100)
+            return True
+        except UsageLimitExceeded:
+            return False
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        outcomes = list(pool.map(lambda _: attempt(), range(40)))
+
+    assert sum(outcomes) == 5
+    assert key_usage(record["id"], 5)["used"] == 5
