@@ -26,7 +26,6 @@ Honesty rules: results on fewer than 50 permissioned real invoices are reported 
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import sys
 import time
@@ -50,57 +49,7 @@ MONEY = {"subtotal", "tax", "total", "unit_price", "line_total"}
 MIN_SAMPLE_FOR_CLAIM = 50
 DEFAULT_SECONDS_PER_FIX = 15  # assumption for the estimate; replace with measured pilot timings
 
-# USD per million tokens (input, output), from Anthropic's published list prices at the
-# time of writing. Verify current pricing before relying on cost figures.
-PRICES = {
-    "claude-opus-5-5": (4.00, 20.00),
-    "claude-sonnet-5-5": (2.00, 10.00),
-    "claude-haiku-5-5": (0.10, 0.50),
-}
-
-# ---------------------------------------------------------------------------
-# Shared output schema for AI engines (subset of commercial_invoice.v1)
-# ---------------------------------------------------------------------------
-_S = {"type": ["string", "null"]}
-_PARTY = {"type": ["object", "null"], "properties": {"name": _S, "address": _S, "tax_id": _S},
-          "required": ["name", "address", "tax_id"], "additionalProperties": False}
-AI_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "seller": _PARTY, "buyer": _PARTY,
-        "invoice_number": _S, "invoice_date": _S, "currency": _S, "incoterm": _S, "incoterm_place": _S,
-        "country_of_origin": _S, "subtotal": _S, "discount": _S, "freight": _S, "insurance": _S,
-        "tax": _S, "total": _S,
-        "line_items": {"type": "array", "items": {
-            "type": "object",
-            "properties": {k: _S for k in ("description", "sku", "hs_code_as_printed", "quantity",
-                                           "unit_of_measure", "unit_price", "line_total", "currency",
-                                           "country_of_origin")},
-            "required": ["description", "sku", "hs_code_as_printed", "quantity", "unit_of_measure",
-                         "unit_price", "line_total", "currency", "country_of_origin"],
-            "additionalProperties": False}},
-        "unreadable_or_uncertain": {"type": "array", "items": {"type": "string"}},
-    },
-    "required": ["seller", "buyer", "invoice_number", "invoice_date", "currency", "incoterm", "incoterm_place",
-                 "country_of_origin", "subtotal", "discount", "freight", "insurance", "tax", "total",
-                 "line_items", "unreadable_or_uncertain"],
-    "additionalProperties": False,
-}
-AI_INSTRUCTIONS = """Extract the commercial invoice in the attached document into the JSON schema.
-
-Rules:
-- Copy only values printed on the document. If a value is not printed, use null. Never guess.
-- Do not infer or suggest tariff/HS codes. Fill hs_code_as_printed only if the invoice prints one for that line.
-- country_of_origin only when explicitly printed (header or line).
-- Amounts: plain decimals with a dot separator and no thousands separators or currency symbols, e.g. "1625.00".
-  Negative amounts (credits) with a leading minus.
-- quantity: the printed number only, e.g. "50" or "2.5"; unit_of_measure separately, e.g. "pcs", "kg".
-- invoice_date: ISO YYYY-MM-DD only when day and month are unambiguous; otherwise null and add
-  "invoice_date" to unreadable_or_uncertain.
-- currency: ISO 4217 code only if printed or unambiguous from a symbol (e.g. "€" is EUR); a bare "$" alone is
-  ambiguous: use null and list "currency" as uncertain.
-- List one line item per invoice row in printed order. Do not merge or split rows.
-- Put any field you could not read confidently in unreadable_or_uncertain (e.g. "line_items[3].quantity")."""
+from app.ai_extraction import AI_SCHEMA, PRICES, ClaudeExtractionEngine, ai_enabled  # noqa: E402,F401
 
 
 @dataclass
@@ -130,62 +79,17 @@ def rules_engine(path: Path) -> EngineResult:
 
 
 class ClaudeEngine:
-    """Claude document extraction with structured outputs.
+    """Benchmark wrapper around app.ai_extraction.ClaudeExtractionEngine.
 
-    Uses the server-side refusal fallback by default so a policy decline is retried
-    on a fallback model inside the same call; the served model is recorded.
+    The CLI only builds this after --confirm-data-sharing and QUILLVORA_AI_ENABLED=true.
     """
 
-    MEDIA = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg",
-             ".jpeg": "image/jpeg", ".webp": "image/webp"}
-
     def __init__(self, model: str = "claude-opus-5-5", effort: str = "medium", client: Any = None):
-        self.model, self.effort = model, effort
-        if client is None:
-            import anthropic
-            client = anthropic.Anthropic()
-        self.client = client
-
-    def _content(self, path: Path) -> list[dict[str, Any]]:
-        media = self.MEDIA.get(path.suffix.lower())
-        if media is None:
-            raise ValueError(f"Unsupported file type for the AI engine: {path.suffix}")
-        data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
-        block_type = "document" if media == "application/pdf" else "image"
-        return [{"type": block_type, "source": {"type": "base64", "media_type": media, "data": data}},
-                {"type": "text", "text": AI_INSTRUCTIONS}]
+        self.engine = ClaudeExtractionEngine(model, effort, client)
 
     def __call__(self, path: Path) -> EngineResult:
-        started = time.monotonic()
-        try:
-            response = self.client.beta.messages.create(
-                model=self.model,
-                max_tokens=16000,
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-                output_config={"effort": self.effort,
-                               "format": {"type": "json_schema", "schema": AI_SCHEMA}},
-                messages=[{"role": "user", "content": self._content(path)}],
-            )
-        except Exception as exc:  # recorded per document; the run continues
-            return EngineResult(None, time.monotonic() - started, error=f"{type(exc).__name__}: {exc}")
-        seconds = time.monotonic() - started
-        usage = {"input_tokens": int(getattr(response.usage, "input_tokens", 0) or 0),
-                 "output_tokens": int(getattr(response.usage, "output_tokens", 0) or 0)}
-        served = getattr(response, "model", self.model) or self.model
-        price_in, price_out = PRICES.get(served, PRICES.get(self.model, (0.0, 0.0)))
-        cost = usage["input_tokens"] / 1e6 * price_in + usage["output_tokens"] / 1e6 * price_out
-        if response.stop_reason == "refusal":
-            return EngineResult(None, seconds, cost, "refused", usage)
-        if response.stop_reason == "max_tokens":
-            return EngineResult(None, seconds, cost, "truncated (max_tokens)", usage)
-        text = next((b.text for b in response.content if getattr(b, "type", "") == "text"), "")
-        try:
-            output = json.loads(text)
-        except json.JSONDecodeError:
-            return EngineResult(None, seconds, cost, "invalid JSON", usage)
-        output["extraction_metadata"] = {"engine": "claude", "model": served}
-        return EngineResult(output, seconds, cost, None, usage)
+        r = self.engine.extract(path.read_bytes(), path.suffix, data_sharing_confirmed=True)
+        return EngineResult(r.result, r.seconds, r.cost_usd, r.error, r.usage)
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +293,9 @@ def main(argv: list[str] | None = None) -> int:
             if not args.confirm_data_sharing:
                 parser.error("The claude engine sends documents to the Anthropic API. Re-run with "
                              "--confirm-data-sharing only if every document owner has given permission.")
+            if not ai_enabled():
+                parser.error("The AI engine is disabled. Set QUILLVORA_AI_ENABLED=true only after the owner "
+                             "authorises paid AI usage.")
             engines["claude"] = ClaudeEngine(args.model, args.effort)
         else:
             parser.error(f"Unknown engine: {name}")

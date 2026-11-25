@@ -8,3 +8,4 @@ stripe==14.4.2
 cryptography==50.0.2
 requests==2.33.1
 boto3==1.44.11
+anthropic==2.14.0

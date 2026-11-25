@@ -283,3 +283,84 @@ def extract_commercial_invoice(raw_text: str) -> dict[str, Any]:
         },
         "extraction_metadata": {"engine": "rules", "method": "rule_based_text_extraction"},
     }
+
+
+_KEY_HEADER_FIELDS = ("invoice_number", "invoice_date", "currency", "total")
+
+
+def validate_commercial_invoice(result: dict[str, Any], *, extra_uncertain: list[str] | None = None) -> dict[str, Any]:
+    """Apply engine-independent checks to a commercial_invoice.v1 result.
+
+    Used for the AI engine's output so both engines are reviewed the same way:
+    row arithmetic, line sum vs subtotal, missing key fields and parties, and any
+    fields the engine itself reported as uncertain. Values are never changed.
+    """
+    doc = dict(result)
+    issues: list[dict[str, str]] = list(doc.get("issues") or [])
+    review: set[str] = set(doc.get("fields_needing_review") or [])
+    items = [dict(item) for item in (doc.get("line_items") or [])]
+    uncertain = list(extra_uncertain or [])
+
+    for number, item in enumerate(items, start=1):
+        item["line_no"] = number
+        flags = set(item.get("fields_needing_review") or [])
+        for name in ("description", "quantity", "unit_price", "line_total"):
+            if item.get(name) in (None, ""):
+                flags.add(name)
+        qty, price, total = _dec(item.get("quantity")), _dec(item.get("unit_price")), _dec(item.get("line_total"))
+        if qty is not None and price is not None and total is not None and abs(qty * price - total) > Decimal("0.02"):
+            flags.update({"quantity", "unit_price", "line_total"})
+            issues.append({"severity": "warning", "field": f"line_items[{number}]",
+                           "message": f"Quantity x unit price ({qty * price:.2f}) does not equal the line total ({total})."})
+        item["fields_needing_review"] = sorted(flags)
+        if flags:
+            review.add("line_items")
+
+    for entry in uncertain:
+        match = re.match(r"line_items\[(\d+)\]\.?(\w+)?", entry)
+        if match:
+            index = int(match.group(1))
+            # Accept 0- or 1-based indexes from the engine; never fail on a bad index.
+            target = items[index - 1] if 1 <= index <= len(items) else (items[index] if 0 <= index < len(items) else None)
+            if target is not None and match.group(2):
+                target["fields_needing_review"] = sorted(set(target["fields_needing_review"]) | {match.group(2)})
+            review.add("line_items")
+        else:
+            review.add(entry)
+        issues.append({"severity": "warning", "field": entry, "message": "The engine reported this field as unreadable or uncertain."})
+
+    for name in _KEY_HEADER_FIELDS:
+        if doc.get(name) in (None, ""):
+            review.add(name)
+            issues.append({"severity": "warning", "field": name, "message": f"{name.replace('_', ' ').capitalize()} was not identified."})
+    for party in ("seller", "buyer"):
+        if not (doc.get(party) or {}).get("name"):
+            review.add(party)
+            issues.append({"severity": "warning", "field": party, "message": f"{party.capitalize()} was not identified."})
+    if not items:
+        review.add("line_items")
+        issues.append({"severity": "warning", "field": "line_items", "message": "No line items were extracted."})
+
+    line_sum = sum((_dec(i.get("line_total")) or Decimal(0)) for i in items) if items else None
+    subtotal = _dec(doc.get("subtotal"))
+    if items and subtotal is not None and abs(line_sum - subtotal) > Decimal("0.02"):
+        review.update({"line_items", "subtotal"})
+        issues.append({"severity": "warning", "field": "line_items",
+                       "message": f"Line totals add up to {line_sum:.2f}, not the invoice subtotal {subtotal}."})
+
+    total = _dec(doc.get("total"))
+    doc.update({
+        "schema_version": SCHEMA_VERSION,
+        "document_type": "credit_note" if total is not None and total < 0 else doc.get("document_type") or "commercial_invoice",
+        "line_items": items,
+        "line_items_total": f"{line_sum:.2f}" if line_sum is not None else None,
+        "issues": issues,
+        "fields_needing_review": sorted(review),
+        "review_required": True,
+        "classification": {
+            "hs_codes_inferred": False,
+            "note": "Tariff classification, duties and declarations are not determined by Quillvora. "
+                    "hs_code_as_printed is copied only when printed on the invoice.",
+        },
+    })
+    return doc
