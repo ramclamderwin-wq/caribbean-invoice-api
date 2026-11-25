@@ -58,3 +58,22 @@ It also records request errors, processing time, warnings, and the review-requir
 
 Do not run this against a production customer account or upload private invoices to an
 unapproved service. Use a staging environment and test credentials.
+
+## Commercial invoices: comparing extraction engines
+
+`scripts/compare_engines.py` compares the current rule-based engine with an AI document
+model on the same labelled commercial invoices, including line items. Both engines emit
+the `commercial_invoice.v1` structure (`app/commercial_invoice.py`).
+
+1. Copy `benchmarks/commercial_manifest.template.json` to a private folder and label each
+   invoice (header fields and every line item). Omit or null anything not printed.
+2. Rules engine only (local, no cost): `python scripts/compare_engines.py --manifest private/manifest.json --engines rules`
+3. Add the AI engine only with written permission from each document owner, because files
+   are sent to the Anthropic API: add `--engines rules,claude --confirm-data-sharing`
+   (optionally `--model claude-sonnet-5-5` or `claude-haiku-5-5` to compare cost).
+4. Read `engine_comparison.md`: per-field accuracy, line-item recall/precision, seconds and
+   model cost per page, and correction time (estimated, and measured if you record it).
+
+Results on fewer than 50 permissioned real invoices are marked "insufficient sample" and
+must not be quoted as accuracy. The AI adapter has been tested with a simulated client only;
+run a 2–3 invoice smoke test first.
