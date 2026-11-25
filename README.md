@@ -124,8 +124,8 @@ Authorization: Bearer iia_live_your_key
 - `POST /v1/extract-text` and `POST /v1/extract-file` require a valid key.
 - `GET /v1/usage` returns billable page usage for the active Stripe subscription billing period when Stripe period boundaries are present; a pasted-text request counts as one page. Legacy/non-subscription keys fall back to the UTC calendar month.
 - `DELETE /v1/account` cancels non-terminal Stripe subscriptions for the authenticated customer, then deletes that customer's local API keys, usage, checkout-delivery records, and recovery codes. Stripe may retain payment/invoice records as legally required.
-- `POST /v1/admin/api-keys` creates a customer key. Protect this endpoint with the server-side `API_ADMIN_KEY` environment variable and the `X-Admin-Key` header.
-- Customer API keys are authenticated by SHA-256 hashes. A separately Fernet-encrypted copy is retained for webhook email retries and browser claim; keep API_KEY_ENCRYPTION_KEY secret and backed up. Email-based recovery verifies a one-time code and rotates the key.
+- `POST /v1/admin/api-keys` creates a customer key. All `/v1/admin/*` routes require `X-Admin-Key` (the server-side `API_ADMIN_KEY`, at least 32 characters), changes also require `X-Admin-Actor`, and every request is audited. See `ADMIN_GUIDE.md`.
+- Customer API keys are authenticated by SHA-256 hashes. A separately Fernet-encrypted copy is retained for webhook email retries; keep API_KEY_ENCRYPTION_KEY secret and backed up. Email-based recovery verifies a one-time code and rotates the key.
 - `DEFAULT_MONTHLY_LIMIT` sets the default monthly page allowance (default 1,000).
 - `DATABASE_PATH` sets the SQLite database file location. Production deployments must use persistent storage and backups.
 
@@ -135,6 +135,7 @@ Example: create a customer key (run only from a trusted administrator environmen
 curl -X POST https://YOUR_API_HOST/v1/admin/api-keys \
   -H "Content-Type: application/json" \
   -H "X-Admin-Key: $API_ADMIN_KEY" \
+  -H "X-Admin-Actor: Your Name" \
   -d '{"label":"Acme Books","monthly_limit":1000}'
 ```
 
@@ -142,7 +143,7 @@ Open `/dashboard` on the deployed service to use the lightweight developer dashb
 
 ## Render deployment notes
 
-Step-by-step staging instructions are in `RENDER_STAGING.md`. Every configuration variable is listed in `.env.example`.
+Step-by-step staging instructions are in `RENDER_STAGING.md`. Every configuration variable is listed in `.env.example`. Administrator operations (customer review, access holds, billing events, audit log) are documented in `ADMIN_GUIDE.md`.
 
 The included Blueprint config uses a paid always-on service and a persistent disk because customer keys and usage records must survive restarts. Before creating the Blueprint, review Render's current service and disk charges. Set the secret `API_ADMIN_KEY` and a comma-separated `CORS_ORIGINS` value in Render's environment settings. Never commit secrets to GitHub.
 

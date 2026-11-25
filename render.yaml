@@ -22,6 +22,12 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         value: ""
+      # Render terminates TLS with one proxy hop; used to find the real client IP.
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      # Your office/VPN IPs or CIDRs for /v1/admin (strongly recommended).
+      - key: ADMIN_ALLOWED_IPS
+        sync: false
       - key: API_KEY_ENCRYPTION_KEY
         sync: false
       - key: RESEND_API_KEY

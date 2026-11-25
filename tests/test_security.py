@@ -25,14 +25,14 @@ from app.main import app
 
 def test_protected_api_and_admin_key_creation(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "api.db"))
-    monkeypatch.setenv("API_ADMIN_KEY", "test-admin-secret")
+    monkeypatch.setenv("API_ADMIN_KEY", "test-admin-secret-0123456789abcdefghijklmnop")
     with TestClient(app) as client:
         denied = client.post("/v1/extract-text", json={"text": "Example invoice"})
         assert denied.status_code == 401
 
         created = client.post(
             "/v1/admin/api-keys",
-            headers={"X-Admin-Key": "test-admin-secret"},
+            headers={"X-Admin-Key": "test-admin-secret-0123456789abcdefghijklmnop", "X-Admin-Actor": "test-operator"},
             json={"label": "first customer", "monthly_limit": 3},
         )
         assert created.status_code == 200
@@ -53,12 +53,12 @@ def test_protected_api_and_admin_key_creation(tmp_path, monkeypatch):
 
 def test_per_minute_rate_limit(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "rate.db"))
-    monkeypatch.setenv("API_ADMIN_KEY", "test-admin-secret")
+    monkeypatch.setenv("API_ADMIN_KEY", "test-admin-secret-0123456789abcdefghijklmnop")
     monkeypatch.setenv("REQUESTS_PER_MINUTE", "1")
     with TestClient(app) as client:
         created = client.post(
             "/v1/admin/api-keys",
-            headers={"X-Admin-Key": "test-admin-secret"},
+            headers={"X-Admin-Key": "test-admin-secret-0123456789abcdefghijklmnop", "X-Admin-Actor": "test-operator"},
             json={"label": "rate limited customer", "monthly_limit": 20},
         )
         api_key = created.json()["api_key"]

@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.security import (
-    UsageLimitExceeded, create_api_key, get_key_record, init_db, key_usage,
+    UsageLimitExceeded, get_key_record, init_db, key_usage,
     reserve_usage, reserve_request_event, release_usage_reservation, reserve_public_rate_limit,
     rotate_api_key, revoke_api_key, database_health_check, delete_customer_local_data,
     expire_past_due_access,
@@ -33,6 +33,8 @@ from app.billing import (
     request_api_key_recovery, confirm_api_key_recovery, cancel_customer_subscriptions,
 )
 from app.extraction import extract_invoice_fields
+from app.admin import router as admin_router
+from app.net import client_ip
 
 APP_NAME = "Quillvora API"
 logger = logging.getLogger("invoice_api")
@@ -125,6 +127,7 @@ class UploadBodySizeLimitMiddleware:
         await send({"type": "http.response.body", "body": body})
 
 
+app.include_router(admin_router)
 app.add_middleware(
     UploadBodySizeLimitMiddleware,
     max_bytes=MAX_UPLOAD_BYTES + 128 * 1024,
@@ -140,11 +143,6 @@ app.add_middleware(
 
 class TextRequest(BaseModel):
     text: str = Field(min_length=1, max_length=200_000)
-
-
-class CreateKeyRequest(BaseModel):
-    label: str = Field(min_length=2, max_length=100)
-    monthly_limit: int = Field(default=1000, ge=1, le=1_000_000)
 
 
 class CheckoutRequest(BaseModel):
@@ -213,7 +211,7 @@ def require_billing_key(authorization: str | None = Header(default=None)) -> dic
 
 
 def _throttle_public_request(request: Request, action: str, default_limit: int, window_seconds: int) -> None:
-    subject = request.client.host if request.client else "unknown"
+    subject = client_ip(request)
     try:
         limit = int(os.getenv(f"{action.upper()}_RATE_LIMIT", str(default_limit)))
         reserve_public_rate_limit(subject, action, limit, window_seconds)
@@ -540,23 +538,6 @@ def root() -> dict[str, str]:
 def dashboard() -> Any:
     from fastapi.responses import FileResponse
     return FileResponse(Path(__file__).parent / "static" / "index.html")
-
-
-@app.post("/v1/admin/api-keys")
-def admin_create_api_key(
-    request: CreateKeyRequest,
-    http_request: Request,
-    x_admin_key: str | None = Header(default=None),
-) -> dict[str, Any]:
-    admin_secret = os.getenv("API_ADMIN_KEY")
-    if not admin_secret:
-        raise HTTPException(status_code=503, detail="API key administration is not configured.")
-    import hmac
-    if not x_admin_key or not hmac.compare_digest(x_admin_key, admin_secret):
-        raise HTTPException(status_code=401, detail="Administrator authorization failed.")
-    _throttle_public_request(http_request, "admin_create_key", 10, 3600)
-    raw_key, metadata = create_api_key(request.label, request.monthly_limit)
-    return {"api_key": raw_key, "warning": "Copy this key now. It cannot be retrieved later.", "customer": metadata}
 
 
 @app.get("/v1/usage")

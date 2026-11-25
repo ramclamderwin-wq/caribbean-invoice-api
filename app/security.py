@@ -814,3 +814,33 @@ def revoke_api_key(key_id: int) -> None:
             "UPDATE api_keys SET active=0,revoked_at=COALESCE(revoked_at,?) WHERE id=?",
             (datetime.now(timezone.utc).isoformat(), key_id),
         )
+
+
+def count_public_rate_limit(subject: str, action: str, window_seconds: int) -> int:
+    """Read-only count used to lock out repeated failures before checking secrets."""
+    import time
+    subject_hash = hashlib.sha256(subject.encode("utf-8")).hexdigest()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM public_rate_limit_events WHERE subject_hash=? AND action=? AND created_at>=?",
+            (subject_hash, action, time.time() - window_seconds),
+        ).fetchone()
+    return int(row["n"])
+
+
+def record_admin_audit(actor: str, action: str, target: str | None, detail: str | None,
+                       client_hash: str, success: bool) -> None:
+    """Append-only administrator audit trail. Never pass secrets or raw API keys."""
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO admin_audit_log(created_at,actor,action,target,detail,client_hash,success)
+               VALUES (?,?,?,?,?,?,?)""",
+            (datetime.now(timezone.utc).isoformat(), actor[:64], action[:64],
+             (target or "")[:128] or None, (detail or "")[:1000] or None, client_hash, 1 if success else 0),
+        )
+
+
+def admin_query(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+    """Read-only helper for the admin module (callers pass static SQL only)."""
+    with _connect() as conn:
+        return [dict(row) for row in conn.execute(sql, params).fetchall()]

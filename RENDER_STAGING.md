@@ -90,12 +90,10 @@ methods only. Record evidence as that document describes.
 
 ## Refunds and disputes: manual review
 
-A `charge.refunded` or `charge.dispute.*` event suspends every key for that Stripe
-customer (`subscription_status` = `refunded`, `refund_review` or `disputed`). Later
-subscription or `invoice.paid` events **do not** restore access; this prevents a
-disputed customer from being silently reactivated by the next renewal. There is no
-admin endpoint to lift a hold yet; after review, an operator must update the row
-in the database (or the customer must re-subscribe). Track this as a follow-up.
+A `charge.refunded` or `charge.dispute.*` event places an access hold on every key
+for that Stripe customer. `subscription_status` keeps showing Stripe's real status;
+the hold is stored separately and no Stripe event removes it. Review and clear
+holds with the admin API — see `ADMIN_GUIDE.md`.
 
 ## Not covered yet (blocks paid launch)
 
