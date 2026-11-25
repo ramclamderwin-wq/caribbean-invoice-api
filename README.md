@@ -1,5 +1,7 @@
 # Quillvora API
 
+> **Direction (2026-11-25):** the initial market is customs brokers and importers processing commercial invoices. See [`docs/customs/`](docs/customs/README.md) for the product specification, validation programme and roadmap. This API remains the extraction engine.
+
 A global invoice extraction API from Quillvora, built for businesses and developers processing invoices across markets and currencies. It accepts pasted invoice text, text-based PDFs, scanned PDFs, and common invoice photos, then returns structured JSON for review. It is designed for businesses and developers processing invoices across markets and currencies.
 
 > **Important:** This is an early-stage extraction tool, not accounting, tax, audit, or payment-approval software. OCR and rule-based extraction can make mistakes. Always compare results with the original invoice.
