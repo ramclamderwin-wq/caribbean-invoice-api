@@ -6,10 +6,12 @@ errors by hand.
 
 ## Scope
 
-- **Customers:** 3–5 brokers or importers from the validation interviews.
+- **Customers:** 3–5 brokers or importers from the validation interviews, in any country
+  (everything runs by email and spreadsheet).
 - **Duration:** 4 weeks.
 - **Volume:** up to 150 invoices per customer (≈5–8 per working day).
-- **Turnaround:** same business day (target 4 hours) for invoices received by 2 pm local time.
+- **Turnaround:** within 1 business day (target 4 working hours), with the cut-off in the
+  customer's time zone.
 
 ## Workflow
 
@@ -83,8 +85,9 @@ quantity | unit_of_measure | unit_price | line_total | currency | review_flags
 **Rationale (assumptions to verify):**
 
 - Keying a 10–30-line invoice is assumed to take 10–30 minutes.
-- At a regional clerk cost of about US$5–15 an hour, that is about US$1–7.50 per invoice
-  of labour. Errors and peak backlogs add cost.
+- At clerk costs of roughly US$5–15 an hour in lower-cost markets and US$20–35 an hour in
+  high-cost markets (assumptions to verify), that is about US$1–17 per invoice of labour.
+  Errors and peak backlogs add cost.
 - Brokers charge clients on the order of US$100–250 per entry (sources in `SOURCES.md`),
   so a ~$2 data cost per invoice is small relative to the fee.
 - **Do not go free:** a free pilot does not test willingness to pay.

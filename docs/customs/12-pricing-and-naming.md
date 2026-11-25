@@ -44,17 +44,18 @@ only, after explicit approval.**
 
 ## Naming and repository strategy
 
-- **Company and brand: keep "Quillvora".** It is neutral and international; nothing ties
-  it to Belize.
+- **Company and brand: keep "Quillvora".** It is neutral and international, which fits
+  the worldwide strategy.
 - **Product line:**
   - "Quillvora for Customs" or "Quillvora Trade Documents" for the broker/importer
     workspace;
   - "Quillvora API" for the engine sold to partners.
 - **Public wording:** describe the product by function ("commercial invoices to
   structured customs data"), list supported currencies and languages, and avoid
-  country-specific framing. Caribbean examples can appear as case studies, not as the
-  boundary.
-- **Repository (recommendation, needs owner approval; not done):**
+  country-specific framing. Customer examples from any country can appear as case
+  studies; none defines the market.
+- **Repository (recommendation, needs owner approval; not done):** the current name
+  `caribbean-invoice-api` contradicts the worldwide positioning, so it should be renamed.
   - Rename `caribbean-invoice-api` to `quillvora-engine` (or `quillvora-api`) after
     PR #12 is resolved. GitHub keeps redirects from the old name, but update CI badges,
     Render settings and any links.

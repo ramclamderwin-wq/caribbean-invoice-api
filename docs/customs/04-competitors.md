@@ -37,10 +37,11 @@ checks and export formats.
   mostly for the US/EU and large forwarders. At least one (Broker Genius) claims ASYCUDA
   output. "Customs invoice extraction" alone is not a moat.
 - **Possible gaps Quillvora can test:**
-  1. **Small brokers in ASYCUDA countries:** a self-serve, affordable tool with local
-     support, with no enterprise sale or ERP needed.
-  2. **Mixed-language, poor-quality supplier invoices** (Spanish/English, phone photos),
-     which are common in regional trade (assumption).
+  1. **Small and mid-size brokers and importers worldwide** who are priced out of, or
+     don't need, enterprise suites: a self-serve, affordable tool with no sales call or ERP.
+     Countries with fewer specialised tools (e.g. many ASYCUDA countries) may convert faster.
+  2. **Mixed-language, poor-quality supplier invoices** (Chinese, Spanish, English and others; phone photos),
+     which are common in global trade, especially from Asian suppliers (assumption).
   3. **Transparent per-invoice pricing**, where competitors mostly quote on request.
   4. **Review-first trust:** every value traceable to the document; no silent
      auto-classification.

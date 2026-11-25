@@ -11,11 +11,12 @@ confirm or correct it.
 | B. Brokerage desks inside freight forwarders / couriers | High volume, standardised processes | Volume and repeatability | Long sales cycles; corporate IT; existing platforms (e.g. CargoWise) |
 | C. Importers preparing their own entries | Distributors, retailers, hardware, auto parts, food importers | Feel the pain directly; may prepare data for their broker | Lower volume each; may not own the declaration step |
 
-**Recommendation:** start with **Segment A**. It has a single decision-maker, the pain is
+**Recommendation:** start with **Segment A, in any country**. It has a single decision-maker, the pain is
 direct, and the firms are small enough to start a paid pilot quickly.
 
-## Facts that shape the profile
+## Facts that shape the profile (examples from several markets; the segment exists in every importing country)
 
+- **United States:** about 11,000–14,000+ active licensed customs brokers (CBP / trade.gov).
 - **Jamaica:** a licensed customs broker is required where the CIF value of goods
   exceeds US$5,000 (Jamaica Customs Agency), so commercial imports flow through brokers.
 - **ASYCUDA World:** used by Belize (all stations since 2012), Jamaica, Trinidad and

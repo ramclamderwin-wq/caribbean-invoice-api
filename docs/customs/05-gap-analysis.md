@@ -39,6 +39,11 @@ on 2026-11-25. **Facts** are from the code; effort figures are **estimates**.
 | Per-country export formats (e.g. ASYCUDA World import where available) | Removes re-keying entirely | 1–3 weeks per country + spec access | P2 |
 | Packing list / bill of lading extraction and cross-checks | Weights, packages, consignee consistency | 2–3 weeks | P3 |
 | Email-in ingestion | How brokers actually receive documents (assumption) | 1 week | P3 |
+| **Global:** full ISO 4217 currency recognition (today about 22 codes, mostly Americas/Europe) | Worldwide invoices | 2–3 days (careful: some codes are ordinary words) | P1 |
+| **Global:** multilingual extraction (today OCR is English and Spanish only) | Asian, European and other supplier invoices | Via AI engine; or more Tesseract languages (bigger image) | P1 |
+| **Global:** locale-aware numbers/dates and unit-of-measure normalisation | Worldwide formats | 1 week | P1 |
+| **Global:** privacy/compliance (GDPR DPA, sub-processors, possible EU data residency) | Selling in the EU/UK and elsewhere | Legal + 1 week engineering | P1 before EU sales |
+| **Global:** multi-currency price display, tax/VAT on subscriptions | Worldwide self-serve billing | 3–5 days + owner approval | P2 |
 | HS classification *suggestions* from verified tariff data | High value but legal risk; research track | Research | Later |
 | Database move from SQLite to Postgres | Multi-instance scale, document metadata volume | 1–2 weeks | When scale requires |
 | Billing plans for platform (per-invoice tiers, users, overage) | New pricing model | 3–5 days (logic exists) | After pricing validated |

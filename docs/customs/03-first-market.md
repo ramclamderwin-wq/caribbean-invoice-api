@@ -1,64 +1,67 @@
-# 3. First geographical market
+# 3. Go-to-market: global from day one
 
-## Recommendation
+**Owner decision (2026-11-25):** Quillvora is built and sold worldwide from the start. It is
+not a regional product. This replaces the earlier recommendation to validate in a single
+Caribbean country.
 
-**Run validation in one English-speaking CARICOM country that uses ASYCUDA World. Default
-choice: Jamaica. Use Belize instead if the founding team can secure 15 broker interviews
-there faster.**
+## Strategy (recommendation)
 
-Expand along the ASYCUDA network afterwards. Treat the United States as a later,
-separate decision, not the starting point.
+**Focus on one customer type, everywhere. Don't focus on a country.**
 
-Global ambition is unchanged. This is where the first 15 interviews and first 3 pilots
-happen.
+- **Who:** independent customs brokers and small-to-mid importers that process supplier
+  commercial invoices, in any country.
+- **How they find us:**
+  - online, self-serve: website, free trial, transparent pricing in USD;
+  - searchable content ("commercial invoice to Excel", "extract invoice line items for
+    customs");
+  - LinkedIn;
+  - broker and forwarder directories and associations;
+  - software-partner integrations later.
+- **What stays global in the product:**
+  - any currency (ISO 4217);
+  - multilingual invoices;
+  - any number and date format;
+  - generic CSV/Excel export with column mapping;
+  - country-specific declaration formats added later, by demand, not upfront.
 
-## Why an ASYCUDA World country
+## Why customer-type focus instead of a single country
 
-- **Fact:** ASYCUDA, the UNCTAD customs system, runs in about 102 countries and
-  territories, including many CARICOM members. Belize has used ASYCUDA World at all
-  customs stations since 2012; Jamaica has implemented it.
-- **Implication:** a product that prepares clean data for ASYCUDA-based declarations
-  in one country is plausibly reusable in many other countries (Caribbean, Africa, Asia
-  Pacific). That is a credible international expansion path.
-- **Assumption to verify:** each country may configure ASYCUDA differently (forms,
-  mandatory fields, import formats), so per-country work is expected.
+- Validation needs a **comparable group**. Fifteen interviews with the same kind of
+  business in five countries still teach a lot. Fifteen interviews spread across brokers,
+  accountants and retailers do not.
+- Online acquisition doesn't depend on geography. The same message and offer can reach
+  brokers anywhere.
+- It avoids building the product around one customs system.
 
-## Why Jamaica as the default
+## Where the first customers will likely come from (facts and assumptions)
 
-| Criterion | Jamaica | Belize | United States |
-|---|---|---|---|
-| Brokers legally required for commercial imports | **Fact:** above US$5,000 CIF | To verify | Not always (importers may self-file) |
-| Market size (brokers, entries) | Larger English-speaking CARICOM economy (to quantify) | Small | Very large (about 11,000–14,000+ licensed brokers) |
-| Competition from funded AI tools | Lower (assumption) | Lower (assumption) | **High:** many AI entry tools integrated with ACE platforms such as Magaya and CargoWise |
-| Language | English | English plus Spanish-language supplier invoices | English |
-| Customs system | ASYCUDA World | ASYCUDA World | ACE (different) |
-| Founder access | Unknown, decide on evidence | Possibly stronger (assumption from repository history) | Unknown |
+| Market group | Facts | Implication |
+|---|---|---|
+| **English-speaking high-import markets** (US, UK, Canada, Australia, Ireland, NZ) | US alone: about 11,000–14,000+ licensed brokers (CBP / trade.gov). Funded AI entry tools already compete there | Biggest demand and willingness to pay, but most competition. Win on self-serve, price, speed to value, review-first trust |
+| **ASYCUDA countries** (about 102 countries and territories: Caribbean, Africa, Asia-Pacific, Latin America) | UNCTAD | Fewer specialised tools (assumption); one data format may be reusable across many countries |
+| **Spanish/Portuguese-speaking markets** (Latin America, Spain) | Engine already reads Spanish; AI engine covers more languages | Localised website and support later |
+| **EU** | Multilingual invoices, strict privacy rules (GDPR) | Needs a DPA, data-processing terms and possibly EU data residency before selling |
 
-**The decision rule matters more than the default.** Choose the country where you can book
-15 interviews within two weeks. Access beats theoretical market size at this stage.
+## Validation approach (updated)
 
-## Why not the US first
+- 15+ interviews with independent customs brokers and importers in **at least 3
+  countries**, recruited online and through the founder's network. Track country in every
+  row so differences show up.
+- Pilot customers can be anywhere. The concierge pilot works by email and spreadsheet.
+- If one country or language clearly converts better, put the marketing there. The
+  product stays global.
 
-- It's the largest market, but crowded: AI commercial-invoice-to-entry tools already
-  target US brokers and integrate with ACE filing software (see `04-competitors.md`).
-- Different system (ACE/ABI), compliance expectations, and higher customer-acquisition
-  cost.
-- **Reconsider after:** paying customers exist and the product has measured accuracy.
+## Honest constraints
 
-## Expansion path (if validation succeeds)
-
-1. Second CARICOM ASYCUDA country (Trinidad and Tobago, Barbados, Guyana, Belize or
-   Jamaica, whichever was not first).
-2. Spanish-speaking Central America and the Caribbean. The engine already handles
-   Spanish invoices; Spanish UI and support would be needed.
-3. Other ASYCUDA regions via partners (forwarders, broker associations).
-4. Larger markets (US, UK/EU) only with a clear differentiator or a partner channel.
-
-## Commercial reality check (assumption-based illustration, not a forecast)
-
-A small Caribbean market caps early revenue. For example, 40 broker firms at about US$300
-a month is roughly US$12,000 a month in recurring revenue. That validates the product, but
-"substantial income" requires the expansion path above.
-
-**Missing fact to find:** the number of licensed broker firms in the chosen country, from
-the customs authority's published broker list.
+- **Language coverage:**
+  - the current rule engine reads English and Spanish only (Tesseract `eng+spa`);
+  - worldwide invoices (Chinese, French, German, Portuguese, Arabic and more) will need
+    either the AI engine or additional OCR languages;
+  - so the AI comparison is now more important.
+- **Privacy law** differs by country (GDPR in the EU/UK, and others). A clear privacy
+  policy, DPA and sub-processor list are needed before taking documents from those
+  regions.
+- **Time zones and support:** self-serve onboarding and written documentation matter more
+  than live support.
+- **Competition is strongest in the US.** Expect a lower conversion rate there, and test
+  messaging.

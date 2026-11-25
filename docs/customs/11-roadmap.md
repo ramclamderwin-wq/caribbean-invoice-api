@@ -53,10 +53,10 @@ about 70%.
 
 | Work | Effort |
 |---|---|
-| Per-country declaration export (ASYCUDA World import formats where available; requires specs and customs authority engagement) | 1–3 weeks per country |
+| Per-country declaration export formats, prioritised by customer demand (e.g. ASYCUDA World, US and UK filing-software partners); requires specs | 1–3 weeks per format |
 | Packing list and bill of lading extraction; cross-document checks | 2–3 weeks |
 | Email-in ingestion | 1 week |
-| Spanish UI; second and third countries | 2–4 weeks |
+| Localised website and UI (Spanish, Portuguese, French first, by demand); multi-currency pricing display | 2–4 weeks |
 | Partner API program (forwarders, broker software vendors) | Ongoing |
 | Research track: HS classification *suggestions* from verified tariff data, with legal review | Research; separate decision |
 
@@ -66,7 +66,7 @@ about 70%.
 Weeks 1-6    Validation            ->  go / pivot / stop
 Weeks 7-11   Concierge pilot       ->  convert to paid?
 Months 3-5   Minimum platform      ->  ~10 paying customers?
-Months 6-12  Integrations + 2nd/3rd market
+Months 6-12  Integrations + scale marketing in best-converting countries
 ```
 
 ## Cost summary to the end of Phase 1 (estimate)
@@ -80,6 +80,8 @@ founder time. Pilot revenue may offset $750–1,250 of it.
 |---|---|
 | Brokers' main pain is not keying | Interviews test this explicitly; pivot within customs if so |
 | Extraction accuracy too low on real invoices | Benchmark before pilot; hybrid engine; review step catches errors |
-| Competitors already serve the segment | Interview question D; differentiate on price, service, language, ASYCUDA focus |
-| Small market caps revenue | ASYCUDA network expansion plan; partner channel |
+| Competitors already serve the segment | Interview question D; differentiate on self-serve, price, multilingual invoices and review-first trust |
+| Spreading too thin across countries | Same product everywhere; focus marketing where conversion is best; add country formats only on demand |
+| Language coverage for worldwide invoices | AI engine (multilingual) as primary; rules as validation; add OCR languages as needed |
+| Privacy law differences (GDPR etc.) | DPA, sub-processor list, deletion policy; consider EU data residency before an EU sales push |
 | Data confidentiality concerns | Pilot agreement, deletion policy, sub-processor transparency |

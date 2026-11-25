@@ -1,7 +1,7 @@
 # Quillvora customs direction: deliverables index
 
 Prepared 2026-11-25 for the change of initial market to **customs brokers and
-importers**. All documents separate:
+importers worldwide**. The product is global from day one (owner decision); focus is on the customer type, not a country. All documents separate:
 
 - **Fact:** verified in this repository or from a cited public source (see `SOURCES.md`);
 - **Assumption:** believed but not verified, and to be tested in validation;
@@ -14,7 +14,7 @@ Everything below about customers is a hypothesis until the validation programme 
 |---|---|---|
 | 1 | Revised product specification | [01-product-spec.md](01-product-spec.md) |
 | 2 | Customs broker / importer customer profile | [02-customer-profile.md](02-customer-profile.md) |
-| 3 | First geographical market | [03-first-market.md](03-first-market.md) |
+| 3 | Go-to-market: global from day one | [03-first-market.md](03-first-market.md) |
 | 4 | Competitor comparison | [04-competitors.md](04-competitors.md) |
 | 5 | Technical gap analysis | [05-gap-analysis.md](05-gap-analysis.md) |
 | 6 | Line-item extraction plan | [06-line-item-plan.md](06-line-item-plan.md) |
