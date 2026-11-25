@@ -396,6 +396,10 @@ def requests_in_last_minute(key_id: int) -> int:
     return int(row["used"])
 
 
+# Statuses set by suspend_customer_access; only manual review clears them.
+BILLING_HOLD_STATUSES = ("refunded", "refund_review", "disputed")
+
+
 def _subscription_access_state(status: str) -> tuple[int, str | None]:
     now = datetime.now(timezone.utc).isoformat()
     if status in {"active", "trialing"}:
@@ -616,14 +620,24 @@ def apply_stripe_subscription_event(
                 (event_id, int(event_created), event_type, now),
             )
             return "stale"
-        conn.execute("""UPDATE api_keys SET active=?,subscription_status=?,
-                     past_due_since=CASE WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END,
+        # Refund/dispute holds are lifted only by manual review: a routine
+        # "active" subscription or invoice.paid event must not restore access.
+        holds = ",".join("?" for _ in BILLING_HOLD_STATUSES)
+        conn.execute(f"""UPDATE api_keys SET
+                     active=CASE WHEN subscription_status IN ({holds}) THEN 0 ELSE ? END,
+                     past_due_since=CASE WHEN subscription_status IN ({holds}) THEN NULL
+                         WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END,
+                     subscription_status=CASE WHEN subscription_status IN ({holds})
+                         THEN subscription_status ELSE ? END,
                      plan=COALESCE(?,plan),monthly_limit=COALESCE(?,monthly_limit),
                      stripe_customer_id=COALESCE(?,stripe_customer_id),
                      current_period_start=COALESCE(?,current_period_start),
                      current_period_end=COALESCE(?,current_period_end)
                      WHERE subscription_id=?""",
-                     (active, status, status, past_due_since, plan, monthly_limit, customer_id,
+                     (*BILLING_HOLD_STATUSES, active,
+                      *BILLING_HOLD_STATUSES, status, past_due_since,
+                      *BILLING_HOLD_STATUSES, status,
+                      plan, monthly_limit, customer_id,
                       current_period_start, current_period_end, subscription_id))
         conn.execute("""INSERT INTO stripe_subscription_state(subscription_id,last_event_created)
                      VALUES (?,?) ON CONFLICT(subscription_id) DO UPDATE SET

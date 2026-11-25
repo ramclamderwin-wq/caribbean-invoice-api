@@ -577,3 +577,48 @@ def test_checkout_email_delivery_claim_is_atomic_and_retryable(tmp_path, monkeyp
     assert claim_checkout_email_delivery("cs_lease_1") is True
     mark_checkout_email_sent("cs_lease_1")
     assert claim_checkout_email_delivery("cs_lease_1") is False
+
+
+@pytest.mark.parametrize("hold_event", [
+    {"id": "evt_hold_refund", "created": 900, "type": "charge.refunded",
+     "data": {"object": {"id": "ch_hold", "customer": "cus_hold", "amount": 1900, "amount_refunded": 1900}}},
+    {"id": "evt_hold_dispute", "created": 900, "type": "charge.dispute.created",
+     "data": {"object": {"id": "dp_hold", "charge": {"id": "ch_hold", "customer": "cus_hold"}}}},
+])
+@pytest.mark.parametrize("followup_type", ["customer.subscription.updated", "invoice.paid"])
+def test_billing_hold_is_not_lifted_by_later_subscription_events(tmp_path, monkeypatch, hold_event, followup_type):
+    """A refund/dispute suspension must survive routine 'active' subscription webhooks."""
+    from app.billing import handle_webhook
+    import app.billing as billing
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "hold.db"))
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    monkeypatch.setenv("STRIPE_PRICE_PROFESSIONAL", "price_pro_hold")
+    init_db()
+    key, _ = create_api_key("held customer", 100)
+    record = get_key_record(key)
+    set_subscription(record["id"], "starter", "active", "cus_hold", "sub_hold", 100)
+
+    events = iter([hold_event])
+    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: next(events))
+    handle_webhook(b"{}", "valid-signature")
+    held = get_key_record(key)
+    assert held["active"] == 0
+    hold_status = held["subscription_status"]
+
+    obj = ({"id": "sub_hold", "customer": "cus_hold", "status": "active"}
+           if followup_type.startswith("customer.") else
+           {"id": "in_hold", "customer": "cus_hold", "subscription": "sub_hold"})
+    events = iter([{"id": "evt_followup", "created": 950, "type": followup_type, "data": {"object": obj}}])
+    monkeypatch.setattr(billing.stripe.Subscription, "retrieve", lambda _id: {
+        "id": "sub_hold", "customer": "cus_hold", "status": "active",
+        "metadata": {}, "items": {"data": [{"price": {"id": "price_pro_hold"}}]},
+    })
+    result = handle_webhook(b"{}", "valid-signature")
+    assert result["outcome"] == "applied"
+    after = get_key_record(key)
+    assert after["active"] == 0
+    assert after["subscription_status"] == hold_status
+    # Non-access fields still follow Stripe so manual review sees the current plan.
+    assert after["plan"] == "professional"

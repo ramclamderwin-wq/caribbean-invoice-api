@@ -70,6 +70,7 @@ Run each scenario with a unique test email/customer and record the Stripe event 
 | 18 | Key recovery | Email code verifies; key rotates once; retries do not rotate again |
 | 19 | Key rotation and revocation | Old key immediately stops authenticating |
 | 20 | Account deletion | Stripe subscriptions are cancelled first; local account data is deleted only after successful cancellation |
+| 21 | Refund or dispute, then a renewal `invoice.paid` / `customer.subscription.updated` while the subscription is still active | Key stays suspended with its refund/dispute status; only manual review restores access |
 
 ## Test payment details
 
