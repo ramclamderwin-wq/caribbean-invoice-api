@@ -25,9 +25,9 @@ Selection prioritises customs brokers, freight forwarders and logistics provider
 | 6 | Canada | Ambassador Customs Brokerage Inc. | Customs brokerage specialist | CBSA list; ambassadorcustoms.ca; info@ambassadorcustoms.com | CBSA listed |
 | 7 | Canada | Noble Customs Brokers Inc. | Customs broker | CBSA list; noblecustoms.ca; import@noblecustoms.ca | CBSA listed |
 | 8 | Canada | A.E. Horne and Son Ltd. | Customs broker / logistics services | CBSA list; aehorne.com; imports@aehorne.com | CBSA listed |
-| 9 | Australia | 20CUBE Logistics Pty Ltd | Listed customs brokerage / logistics provider | ABF brokerage list; 20cube.com | ABF list match (14 Mar 2025) |
-| 10 | Australia | Agility Logistics Pty Ltd | Listed logistics and customs provider | ABF brokerage list; agility.com | ABF list match (14 Mar 2025) |
-| 11 | Australia | CEVA Freight (Australia) Pty Ltd | Listed freight and customs provider | ABF brokerage list; ceva logistics official site | ABF list match (14 Mar 2025) |
+| 9 | Australia | Kuehne & Nagel Pty Ltd | Listed freight and customs provider | ABF brokerage list; kuehne-nagel.com/en-au | ABF list match (14 Mar 2025) |
+| 10 | Australia | Rhenus Logistics Australia Pty Ltd | Listed freight and customs provider | ABF brokerage list; rhenus.group | ABF list match (14 Mar 2025) |
+| 11 | Australia | Henning Harders (Australia) Pty Ltd | Listed customs and freight provider | ABF brokerage list; henningharders.com.au | ABF list match (14 Mar 2025) |
 | 12 | Australia | DHL Global Forwarding (Australia) Pty Ltd | Listed freight and customs provider | ABF brokerage list; dhl.com/au | ABF list match (14 Mar 2025) |
 | 13 | Australia | DSV Air & Sea Pty Ltd | Listed freight and customs provider | ABF brokerage list; dsv.com/en-au | ABF list match (14 Mar 2025) |
 | 14 | Australia | Expeditors International Pty Ltd | Listed international freight and customs provider | ABF brokerage list; expeditors.com | ABF list match (14 Mar 2025) |
