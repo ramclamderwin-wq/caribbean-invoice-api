@@ -143,7 +143,7 @@ Open `/dashboard` on the deployed service to use the lightweight developer dashb
 
 ## Render deployment notes
 
-Step-by-step staging instructions are in `RENDER_STAGING.md`. Every configuration variable is listed in `.env.example`. Administrator operations (customer review, access holds, billing events, audit log) are documented in `ADMIN_GUIDE.md`.
+Step-by-step staging instructions are in `RENDER_STAGING.md`. Every configuration variable is listed in `.env.example`. Administrator operations (customer review, access holds, billing events, audit log) are documented in `ADMIN_GUIDE.md`; backups in `BACKUP_RUNBOOK.md`; the security review in `SECURITY_REVIEW.md`; corrected Stripe plan wording in `STRIPE_PLAN_DESCRIPTIONS.md`; and launch recommendations in `COMMERCIAL_LAUNCH_PLAN.md`.
 
 The included Blueprint config uses a paid always-on service and a persistent disk because customer keys and usage records must survive restarts. Before creating the Blueprint, review Render's current service and disk charges. Set the secret `API_ADMIN_KEY` and a comma-separated `CORS_ORIGINS` value in Render's environment settings. Never commit secrets to GitHub.
 
