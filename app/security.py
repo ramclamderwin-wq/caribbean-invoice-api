@@ -136,6 +136,9 @@ def init_db() -> None:
             actor TEXT NOT NULL, action TEXT NOT NULL, target TEXT,
             detail TEXT, client_hash TEXT, success INTEGER NOT NULL)""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_admin_audit_time ON admin_audit_log(created_at)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS backup_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL,
+            success INTEGER NOT NULL, detail TEXT)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS stripe_subscription_state (
             subscription_id TEXT PRIMARY KEY, last_event_created INTEGER NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS public_rate_limit_events (

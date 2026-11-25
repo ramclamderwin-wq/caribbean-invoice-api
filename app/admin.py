@@ -303,3 +303,37 @@ def audit_log(
     )
     _audit(ctx, "view_audit_log", None, count=len(rows))
     return {"entries": rows}
+
+
+@router.get("/backups")
+def backup_status(ctx: AdminContext = Depends(require_admin), limit: int = Query(default=20, ge=1, le=200)) -> dict[str, Any]:
+    runs = admin_query(
+        "SELECT created_at,success,detail FROM backup_runs ORDER BY id DESC LIMIT ?", (limit,)
+    )
+    for run in runs:
+        try:
+            run["detail"] = json.loads(run["detail"] or "{}")
+        except ValueError:
+            pass
+    _audit(ctx, "view_backups", None, count=len(runs))
+    return {
+        "scheduled": os.getenv("BACKUP_ENABLED", "").lower() in {"1", "true", "yes"},
+        "interval_hours": os.getenv("BACKUP_INTERVAL_HOURS", "24"),
+        "offsite_configured": bool(os.getenv("BACKUP_S3_BUCKET")),
+        "encryption_configured": bool(os.getenv("BACKUP_ENCRYPTION_KEY")),
+        "runs": runs,
+    }
+
+
+@router.post("/backups/run")
+def run_backup_now(ctx: AdminContext = Depends(require_named_admin)) -> dict[str, Any]:
+    from app import backup
+    try:
+        result = backup.run_backup()
+    except Exception as exc:
+        backup.record_failure(exc)
+        _audit(ctx, "run_backup", None, success=False, error=type(exc).__name__)
+        detail = str(exc) if isinstance(exc, backup.BackupError) else "Backup failed; see server logs."
+        raise HTTPException(status_code=503, detail=detail) from exc
+    _audit(ctx, "run_backup", None, file=result.path.name, uploaded=bool(result.uploaded_to))
+    return {"status": "ok", "backup": result.as_dict()}

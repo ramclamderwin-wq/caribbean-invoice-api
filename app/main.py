@@ -54,10 +54,30 @@ if TESSERACT_CMD:
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 
+async def _backup_scheduler() -> None:
+    """Periodic encrypted backups when BACKUP_ENABLED=true (see app/backup.py)."""
+    from app import backup
+    interval = max(1.0, float(os.getenv("BACKUP_INTERVAL_HOURS", "24"))) * 3600
+    await asyncio.sleep(max(0.0, float(os.getenv("BACKUP_FIRST_DELAY_MINUTES", "10"))) * 60)
+    while True:
+        try:
+            await run_in_threadpool(backup.run_backup)
+        except Exception as exc:  # keep the API running; failures are recorded and logged
+            backup.record_failure(exc)
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     init_db()
-    yield
+    task = None
+    if os.getenv("BACKUP_ENABLED", "").lower() in {"1", "true", "yes"}:
+        task = asyncio.create_task(_backup_scheduler())
+    try:
+        yield
+    finally:
+        if task:
+            task.cancel()
 
 
 app = FastAPI(
