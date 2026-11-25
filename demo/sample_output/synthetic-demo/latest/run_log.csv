@@ -1,0 +1,6 @@
+﻿file,engine,status,error,pages,seconds,cost_usd,line_items,fields_needing_review,issues
+demo-001-en-standard.pdf,rules,ok,,1,0.36,0.0,4,,0
+demo-002-es-factura.pdf,rules,ok,,1,0.005,0.0,3,,0
+demo-003-eur-comma-decimals.pdf,rules,ok,,1,0.002,0.0,2,,0
+demo-004-with-errors.pdf,rules,needs_review,,1,0.002,0.0,2,buyer; line_items; subtotal,3
+demo-005-scanned-image.png,rules,ok,,1,0.412,0.0,2,,0

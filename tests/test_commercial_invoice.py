@@ -131,3 +131,12 @@ def test_pilot_export_writes_excel_friendly_csvs(tmp_path):
     assert head[0]["review_status"] == "pending"
     assert len(rows) == 3 and rows[1]["unit_price"] == "4.25"
     assert rows[0]["description"].startswith("'=")  # neutralised for Excel
+
+
+def test_address_starting_with_unit_is_not_mistaken_for_table_header():
+    result = extract_commercial_invoice(
+        "Example Co\nInvoice No: X-2\nDate: 2026-03-03\nBuyer: Example Engineering Supplies Ltd.\n"
+        "Unit 4 Sample Park, Leeds, United Kingdom\nPart No Description Qty Unit Price Amount\n"
+        "BM-77 Ball bearing 400 pcs 1.25 500.00\nSubtotal: EUR 500.00\nTotal: EUR 500.00")
+    assert result["buyer"]["address"] == "Unit 4 Sample Park, Leeds, United Kingdom"
+    assert len(result["line_items"]) == 1

@@ -16,3 +16,7 @@ data/
 *.sqlite3
 *.log
 .DS_Store
+
+# Pilot outputs and private customer files (never commit)
+pilot_runs/
+private/

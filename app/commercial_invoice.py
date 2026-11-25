@@ -72,7 +72,8 @@ def _labelled_block(lines: list[str], labels: str) -> dict[str, Any] | None:
         inline = match.group(1).strip()
         following = []
         for nxt in lines[index + 1:index + 4]:
-            if re.match(r"^\s*[A-Za-z ]{2,30}\s*:", nxt) or _END_OF_TABLE.match(nxt) or _HEADER_QTY.search(nxt):
+            is_table_header = bool(_HEADER_QTY.search(nxt) and (_HEADER_PRICE.search(nxt) or _HEADER_AMOUNT.search(nxt)))
+            if re.match(r"^\s*[A-Za-z ]{2,30}\s*:", nxt) or _END_OF_TABLE.match(nxt) or is_table_header:
                 break
             following.append(nxt.strip())
         name = inline or (following.pop(0) if following else "")
