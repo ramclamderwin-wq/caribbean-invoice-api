@@ -40,9 +40,11 @@ demand is proven.
 | Workspaces, users and roles; invite flow | 1–2 dev weeks |
 | Platform billing plans (reuse Stripe logic; test mode first, with approval) | 3–5 days |
 | Accuracy and time-saved dashboard from correction logs | 1 week |
+| Global foundations: engine interface, generic country pack, export adapters with column mapping, i18n-ready UI, tenant locale settings | 1–2 dev weeks |
+| Worldwide self-serve billing: multi-currency price display, tax handling (owner approval) | 3–5 days |
 | Security review, penetration test, privacy/DPA, sub-processor list | 1 week + external test ($2,000–8,000 estimate) |
 
-- **Total:** about 8–12 dev weeks.
+- **Total:** about 10–14 dev weeks.
 - **Running cost** at early scale (assumption): hosting $25–100/month; storage and
   backups $5–20/month; AI about $0.02–0.05 per page; email service $0–20/month.
 

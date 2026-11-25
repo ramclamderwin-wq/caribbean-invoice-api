@@ -9,17 +9,18 @@ structured, reviewed commercial-invoice data. Then decide whether to fund the pl
 
 ## Segment and market
 
-Independent customs brokerage firms (1–20 staff) and small-to-mid importers, **worldwide**,
-in at least 3 countries (see `03-first-market.md`). Recruit online (LinkedIn, broker
-directories, associations, forums) and through the founder's network; interviews by video
-call. Keep brokers and importers as separate tracks in the data, and record the country for
-every interview.
+Customs brokers and small/mid freight forwarders that handle customs (importers as a
+secondary track), **worldwide**. **Quota: 20+ interviews, no more than 40% from one
+country, at least 3 countries, both brokers and forwarders represented** (see
+`03-first-market.md` for wave-1 markets). Recruit online (public broker/agent registers,
+associations, LinkedIn, WCA/FIATA directories) and through the founder's network;
+interviews by video call. Record segment and country for every interview.
 
 ## Targets (go/no-go gates)
 
 | Gate | Target |
 |---|---|
-| Interviews | ≥ 15 in the defined segment (independent brokers or importers), across ≥ 3 countries |
+| Interviews | ≥ 15 (target 20+) brokers/forwarders, across ≥ 3 countries, ≤ 40% from one country |
 | Pain | ≥ 5 rank invoice processing among their top 3 operational problems, **with a number** (hours/week, staff, error cost) |
 | Willingness to pay | ≥ 3 paid pilot commitments or signed letters of intent **at a stated price** |
 | Data | ≥ 50 real commercial invoices with written permission and privacy safeguards |

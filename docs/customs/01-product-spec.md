@@ -19,7 +19,15 @@ declarations. Those remain the licensed broker's decisions.
 | Broker data-entry clerk / declarant | Get invoice header and line items into the declaration quickly and correctly |
 | Broker owner / manager | More entries per staff member, fewer amendments and penalties, faster clearance for clients |
 | In-house import coordinator (importer) | Prepare clean data for their broker or own declarations; reconcile invoices with POs |
+| Freight forwarder operations staff | Turn supplier invoices and packing lists into booking and customs data |
 | Software partner (later) | Embed extraction in a broker/forwarding system via the API |
+
+## Global by design
+
+- One platform for every country. Country-specific customs requirements are optional **country packs** and **export adapters** on top of a country-neutral document model (see `14-global-architecture.md`).
+- The default "generic" pack (CSV/XLSX export, no country rules) lets any customer anywhere use Quillvora from day one.
+- Currencies: the current 22 for now (owner decision), expandable by configuration. Languages: English and Spanish via rules today; the AI engine is the path to worldwide languages.
+- No dependency on any one customs system (ASYCUDA, ACE, CDS and others are modules).
 
 ## Core workflow (MVP after validation)
 
@@ -34,8 +42,9 @@ declarations. Those remain the licensed broker's decisions.
 5. **Review:** a side-by-side table with the original document; the reviewer corrects and
    approves. Each correction is logged, which also measures accuracy over time.
 6. **Export:** CSV/Excel first (pilot: `invoices.csv` + `line_items.csv`). Later:
-   per-country declaration import formats (e.g. ASYCUDA World where an import format
-   exists), broker systems, and accounting exports.
+   per-country declaration formats as optional modules, prioritised by customer demand
+   (for example US ACE partner software, UK CDS intermediary software, ASYCUDA World
+   countries), forwarding/broker systems, and accounting exports.
 
 ## Explicitly out of scope until separately validated
 

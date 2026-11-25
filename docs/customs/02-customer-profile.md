@@ -8,11 +8,11 @@ confirm or correct it.
 | Segment | Description | Why interesting | Main risk |
 |---|---|---|---|
 | **A. Independent customs brokerage firms (1–20 staff)** | Licensed brokers preparing declarations for many importers | Many invoices from many suppliers; data entry is core work; owner is the buyer | Price sensitivity; may already have tools |
-| B. Brokerage desks inside freight forwarders / couriers | High volume, standardised processes | Volume and repeatability | Long sales cycles; corporate IT; existing platforms (e.g. CargoWise) |
+| **B. Small and mid-size freight forwarders that handle customs** | Book shipments, process invoices, packing lists and B/Ls, and often file customs | About 40,000 firms in FIATA's network; SMEs underserved by enterprise software | Many already use a forwarding system; need integration or export into it |
+| B2. Brokerage desks inside large forwarders and couriers | High volume, standardised processes | Volume and repeatability | Long sales cycles; corporate IT; existing platforms (e.g. CargoWise) |
 | C. Importers preparing their own entries | Distributors, retailers, hardware, auto parts, food importers | Feel the pain directly; may prepare data for their broker | Lower volume each; may not own the declaration step |
 
-**Recommendation:** start with **Segment A, in any country**. It has a single decision-maker, the pain is
-direct, and the firms are small enough to start a paid pilot quickly.
+**Recommendation:** start with **Segments A and B worldwide** ("trade-document processors"). They have a single decision-maker, direct pain, and firms small enough to start a paid pilot quickly. Exporters, 3PLs, software partners and general businesses are assessed in `13-global-market-research.md`.
 
 ## Facts that shape the profile (examples from several markets; the segment exists in every importing country)
 

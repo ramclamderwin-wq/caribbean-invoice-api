@@ -14,7 +14,7 @@ Everything below about customers is a hypothesis until the validation programme 
 |---|---|---|
 | 1 | Revised product specification | [01-product-spec.md](01-product-spec.md) |
 | 2 | Customs broker / importer customer profile | [02-customer-profile.md](02-customer-profile.md) |
-| 3 | Go-to-market: global from day one | [03-first-market.md](03-first-market.md) |
+| 3 | Global customer acquisition strategy | [03-first-market.md](03-first-market.md) |
 | 4 | Competitor comparison | [04-competitors.md](04-competitors.md) |
 | 5 | Technical gap analysis | [05-gap-analysis.md](05-gap-analysis.md) |
 | 6 | Line-item extraction plan | [06-line-item-plan.md](06-line-item-plan.md) |
@@ -24,6 +24,8 @@ Everything below about customers is a hypothesis until the validation programme 
 | 10 | Concierge pilot design and pricing | [10-concierge-pilot.md](10-concierge-pilot.md) |
 | 11 | Roadmap, costs and timelines | [11-roadmap.md](11-roadmap.md) |
 | — | Commercial pricing strategy and naming | [12-pricing-and-naming.md](12-pricing-and-naming.md) |
+| — | **Global market research: regions, segments, willingness to pay** | [13-global-market-research.md](13-global-market-research.md) |
+| — | **Global architecture: modular country packs** | [14-global-architecture.md](14-global-architecture.md) |
 | — | Sources | [SOURCES.md](SOURCES.md) |
 
 ## Built in this round (code, all local and tested; nothing deployed)

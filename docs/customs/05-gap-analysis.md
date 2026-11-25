@@ -39,7 +39,8 @@ on 2026-11-25. **Facts** are from the code; effort figures are **estimates**.
 | Per-country export formats (e.g. ASYCUDA World import where available) | Removes re-keying entirely | 1–3 weeks per country + spec access | P2 |
 | Packing list / bill of lading extraction and cross-checks | Weights, packages, consignee consistency | 2–3 weeks | P3 |
 | Email-in ingestion | How brokers actually receive documents (assumption) | 1 week | P3 |
-| **Global:** full ISO 4217 currency recognition (today about 22 codes, mostly Americas/Europe) | Worldwide invoices | 2–3 days (careful: some codes are ordinary words) | P1 |
+| **Global:** wider currency recognition (today 22 codes) | Worldwide invoices | 2–3 days (careful: some codes are ordinary words) | **Deferred by owner decision**; add when customers need other currencies |
+| **Global:** country-pack and export-adapter interfaces, generic pack | Modular expansion without rebuilds (`14-global-architecture.md`) | 3–5 days | P1 |
 | **Global:** multilingual extraction (today OCR is English and Spanish only) | Asian, European and other supplier invoices | Via AI engine; or more Tesseract languages (bigger image) | P1 |
 | **Global:** locale-aware numbers/dates and unit-of-measure normalisation | Worldwide formats | 1 week | P1 |
 | **Global:** privacy/compliance (GDPR DPA, sub-processors, possible EU data residency) | Selling in the EU/UK and elsewhere | Legal + 1 week engineering | P1 before EU sales |
