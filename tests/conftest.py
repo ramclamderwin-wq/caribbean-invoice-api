@@ -23,6 +23,16 @@ class _Service:
 
 
 @pytest.fixture(autouse=True)
+def isolated_database(tmp_path, monkeypatch):
+    """Every test gets its own SQLite file unless it sets DATABASE_PATH itself.
+
+    Without this, tests share data/invoice_api.db and persistent rate-limit
+    rows from earlier runs can make later runs fail.
+    """
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "default-test.db"))
+
+
+@pytest.fixture(autouse=True)
 def stripe_client_test_adapter(monkeypatch):
     """Bridge StripeClient service calls to the existing isolated SDK mocks."""
     class FakeStripeClient:

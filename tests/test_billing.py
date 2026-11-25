@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.billing import create_checkout_session, claim_checkout_key
+from app.billing import create_checkout_session
 from app.security import create_api_key, get_key_record, init_db, set_subscription
 from app.main import app
 
@@ -36,31 +36,33 @@ def test_public_checkout_does_not_require_an_api_key(monkeypatch):
 
 
 def test_checkout_key_is_created_once_and_linked_to_subscription(tmp_path, monkeypatch):
+    from app.security import provision_checkout_key
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "claim.db"))
-    init_db()
-    import app.billing as billing
-    monkeypatch.setenv("STRIPE_SECRET_KEY","sk_test_example")
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_example")
     from cryptography.fernet import Fernet
     monkeypatch.setenv("API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode())
-    from types import SimpleNamespace
-    fake_session = {
-        "status":"complete","mode":"subscription","payment_status":"paid",
-        "metadata":{"plan":"professional","signup_email":"buyer@example.com"},
-        "customer":"cus_test_1","subscription":"sub_test_1"}
-    fake_client = SimpleNamespace(v1=SimpleNamespace(
-        checkout=SimpleNamespace(sessions=SimpleNamespace(retrieve=lambda session_id: fake_session)),
-        subscriptions=SimpleNamespace(retrieve=lambda sub_id: {"status":"active"}),
-    ))
-    monkeypatch.setattr(billing, "_configure", lambda: fake_client)
-    key=claim_checkout_key("cs_test_1")
-    record=get_key_record(key)
+    init_db()
+    key = provision_checkout_key("cs_test_1", "buyer@example.com", "professional", "cus_test_1", "sub_test_1", 5000)
+    again = provision_checkout_key("cs_test_1", "buyer@example.com", "professional", "cus_test_1", "sub_test_1", 5000)
+    assert again == key
+    assert key.startswith("iia_test_")
+    record = get_key_record(key)
     assert record["active"] == 1
     assert record["plan"] == "professional"
     assert record["monthly_limit"] == 5000
     assert record["stripe_customer_id"] == "cus_test_1"
     assert record["subscription_id"] == "sub_test_1"
-    with pytest.raises(ValueError,match="already been claimed"):
-        claim_checkout_key("cs_test_1")
+    import sqlite3
+    with sqlite3.connect(tmp_path / "claim.db") as conn:
+        assert conn.execute("SELECT COUNT(*) FROM api_keys").fetchone()[0] == 1
+
+
+def test_billing_module_has_no_browser_claim_path():
+    import app.billing as billing
+    import app.security as security
+    import inspect
+    assert not hasattr(billing, "claim_checkout_key")
+    assert "claim" not in inspect.signature(security.provision_checkout_key).parameters
 
 
 def test_subscription_activates_api_key_and_sets_plan_quota(tmp_path, monkeypatch):
@@ -248,10 +250,6 @@ def test_checkout_completed_webhook_emails_same_encrypted_key_once(tmp_path, mon
     assert delivered[0][0] == "buyer@example.com"
     assert delivered[0][1] == delivery["api_key"]
     assert delivery["email_sent_at"] is not None
-    browser_key = claim_checkout_key("cs_checkout_email_1")
-    assert browser_key == delivery["api_key"]
-    with pytest.raises(ValueError, match="already been claimed"):
-        claim_checkout_key("cs_checkout_email_1")
 
 
 
@@ -469,10 +467,11 @@ def test_refund_webhook_suspends_customer_access(tmp_path, monkeypatch):
     }
     monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: event)
     result = handle_webhook(b"{}", "valid-signature")
-    assert result["outcome"] == "recorded"
+    assert result["outcome"] == "hold_applied"
     updated = get_key_record(key)
     assert updated["active"] == 0
-    assert updated["subscription_status"] == "refunded"
+    assert updated["access_hold_reason"] == "refunded"
+    assert updated["subscription_status"] == "active"  # Stripe status stays accurate
 
 
 def test_dispute_webhook_suspends_customer_access(tmp_path, monkeypatch):
@@ -493,10 +492,11 @@ def test_dispute_webhook_suspends_customer_access(tmp_path, monkeypatch):
     monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *args: event)
     monkeypatch.setattr(billing.stripe.Charge, "retrieve", lambda _charge: {"customer": "cus_dispute"})
     result = handle_webhook(b"{}", "valid-signature")
-    assert result["outcome"] == "recorded"
+    assert result["outcome"] == "hold_applied"
     updated = get_key_record(key)
     assert updated["active"] == 0
-    assert updated["subscription_status"] == "disputed"
+    assert updated["access_hold_reason"] == "disputed"
+    assert updated["subscription_status"] == "active"
 
 
 def test_paused_subscription_collection_disables_api_key(tmp_path, monkeypatch):
@@ -605,7 +605,8 @@ def test_billing_hold_is_not_lifted_by_later_subscription_events(tmp_path, monke
     handle_webhook(b"{}", "valid-signature")
     held = get_key_record(key)
     assert held["active"] == 0
-    hold_status = held["subscription_status"]
+    hold_reason = held["access_hold_reason"]
+    assert hold_reason in {"refunded", "disputed"}
 
     obj = ({"id": "sub_hold", "customer": "cus_hold", "status": "active"}
            if followup_type.startswith("customer.") else
@@ -619,6 +620,7 @@ def test_billing_hold_is_not_lifted_by_later_subscription_events(tmp_path, monke
     assert result["outcome"] == "applied"
     after = get_key_record(key)
     assert after["active"] == 0
-    assert after["subscription_status"] == hold_status
-    # Non-access fields still follow Stripe so manual review sees the current plan.
+    assert after["access_hold_reason"] == hold_reason
+    # Stripe's subscription status and plan stay accurate for manual review.
+    assert after["subscription_status"] == "active"
     assert after["plan"] == "professional"

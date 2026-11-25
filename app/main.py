@@ -26,6 +26,7 @@ from app.security import (
     UsageLimitExceeded, create_api_key, get_key_record, init_db, key_usage,
     reserve_usage, reserve_request_event, release_usage_reservation, reserve_public_rate_limit,
     rotate_api_key, revoke_api_key, database_health_check, delete_customer_local_data,
+    expire_past_due_access,
 )
 from app.billing import (
     create_checkout_session, create_portal_session, handle_webhook,
@@ -160,25 +161,39 @@ class RecoveryConfirmRequest(BaseModel):
     code: str = Field(pattern=r"^\d{6}$")
 
 
-def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+HOLD_DETAIL = "API access is suspended pending a billing review. Contact support."
+
+
+def _active_key_record(authorization: str | None) -> dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
     record = get_key_record(authorization[7:].strip())
-    if not record or not record["active"]:
+    if not record or record.get("revoked_at"):
         raise HTTPException(status_code=401, detail="API key is invalid or inactive.")
+    if record.get("access_hold_reason"):
+        raise HTTPException(status_code=403, detail=HOLD_DETAIL)
+    if not record["active"]:
+        raise HTTPException(status_code=401, detail="API key is invalid or inactive.")
+    return record
+
+
+def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    record = _active_key_record(authorization)
     if record.get("subscription_status") == "past_due":
         started = record.get("past_due_since")
         grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
         # Legacy past_due rows without a timestamp cannot receive an indefinite grace period.
         if not started:
-            revoke_api_key(record["id"])
+            expire_past_due_access(record["id"])
             raise HTTPException(status_code=402, detail="Payment is overdue. Update your payment method to restore API access.")
         try:
             past_due_at = datetime.fromisoformat(started)
         except ValueError:
             past_due_at = datetime.now(timezone.utc) - timedelta(hours=grace_hours + 1)
+        if past_due_at.tzinfo is None:
+            past_due_at = past_due_at.replace(tzinfo=timezone.utc)
         if datetime.now(timezone.utc) - past_due_at > timedelta(hours=grace_hours):
-            revoke_api_key(record["id"])
+            expire_past_due_access(record["id"])
             raise HTTPException(status_code=402, detail="Payment is overdue. Update your payment method to restore API access.")
     return record
 
@@ -194,12 +209,7 @@ def require_deletion_key(authorization: str | None = Header(default=None)) -> di
 
 
 def require_billing_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
-    record = get_key_record(authorization[7:].strip())
-    if not record or not record["active"]:
-        raise HTTPException(status_code=401, detail="API key is invalid or inactive.")
-    return record
+    return _active_key_record(authorization)
 
 
 def _throttle_public_request(request: Request, action: str, default_limit: int, window_seconds: int) -> None:

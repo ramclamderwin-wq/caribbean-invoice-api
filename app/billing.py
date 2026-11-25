@@ -12,7 +12,7 @@ from app.security import (
     apply_stripe_subscription_event, checkout_key_delivery, mark_checkout_email_sent,
     provision_checkout_key, record_stripe_event, get_key_record_by_customer_id,
     create_recovery_code, prepare_recovery_key, mark_recovery_email_sent,
-    suspend_customer_access, claim_checkout_email_delivery, release_checkout_email_delivery,
+    apply_customer_hold_event, claim_checkout_email_delivery, release_checkout_email_delivery,
 )
 from app.email_delivery import send_api_key_email, send_recovery_code_email
 
@@ -96,37 +96,6 @@ def create_checkout_session(plan: str, email: str) -> str:
         "subscription_data": {"metadata": {"plan": plan, "signup_email": email}},
     })
     return str(session.url)
-
-
-def claim_checkout_key(session_id: str) -> str:
-    """Legacy browser claim. Kept temporarily for existing checkout sessions."""
-    client = _configure()
-    session = client.v1.checkout.sessions.retrieve(session_id)
-    if session.get("status") != "complete" or session.get("mode") != "subscription":
-        raise ValueError("Checkout has not been completed.")
-    if session.get("payment_status") not in {"paid", "no_payment_required"}:
-        raise ValueError("Payment has not been confirmed yet.")
-    metadata = session.get("metadata") or {}
-    plan = metadata.get("plan")
-    email = (
-        (session.get("customer_details") or {}).get("email")
-        or session.get("customer_email")
-        or metadata.get("signup_email")
-    )
-    customer_id = session.get("customer")
-    subscription_id = session.get("subscription")
-    if plan not in PLAN_PRICE_ENV or not email or not customer_id or not subscription_id:
-        raise ValueError("The completed checkout is missing required subscription details.")
-    subscription = client.v1.subscriptions.retrieve(subscription_id)
-    status = str(subscription.get("status", "incomplete"))
-    if status not in {"active", "trialing"}:
-        raise ValueError("The subscription is not active. Please contact support.")
-    return provision_checkout_key(
-        session_id, email, plan, str(customer_id), str(subscription_id),
-        _monthly_limit(plan), claim=True,
-        current_period_start=_stripe_period_value(subscription, "current_period_start"),
-        current_period_end=_stripe_period_value(subscription, "current_period_end"),
-    )
 
 
 def cancel_customer_subscriptions(customer_id: str) -> None:
@@ -307,7 +276,7 @@ def _deliver_checkout_key(session: Any) -> str:
         raise ValueError("Unable to map the completed Checkout subscription to a configured plan.")
     provision_checkout_key(
         session_id, str(email), plan, str(customer_id), str(subscription_id),
-        _monthly_limit(plan), claim=False,
+        _monthly_limit(plan),
         current_period_start=_stripe_period_value(current, "current_period_start"),
         current_period_end=_stripe_period_value(current, "current_period_end"),
     )
@@ -326,7 +295,7 @@ def _deliver_checkout_key(session: Any) -> str:
     return "email_delivered"
 
 
-def _suspend_charge_customer(charge_or_dispute: Any, reason: str) -> int:
+def _charge_customer_id(charge_or_dispute: Any) -> str:
     customer_id = charge_or_dispute.get("customer")
     if not customer_id:
         charge_id = charge_or_dispute.get("charge")
@@ -336,9 +305,24 @@ def _suspend_charge_customer(charge_or_dispute: Any, reason: str) -> int:
             charge = _configure().v1.charges.retrieve(str(charge_id))
             customer_id = charge.get("customer")
     if not customer_id:
-        logger.error("Cannot suspend access for %s event: Stripe customer ID is missing.", reason)
+        logger.error("Stripe billing event is missing the customer reference.")
         raise ValueError("Stripe billing event is missing the customer reference.")
-    return suspend_customer_access(str(customer_id), reason)
+    return str(customer_id)
+
+
+def _dispute_hold_reason(event_type: str, dispute: Any) -> str | None:
+    """Map a dispute event to an access hold. Never lifts an existing hold."""
+    if event_type == "charge.dispute.created":
+        return "disputed"
+    if event_type == "charge.dispute.closed":
+        status = str(dispute.get("status") or "")
+        if status == "won":
+            return None  # existing hold stays until an administrator reviews it
+        if status == "lost":
+            return "dispute_lost"
+        return "disputed"
+    # charge.dispute.updated: evidence/status changes; the hold was set on creation.
+    return None
 
 
 def handle_webhook(payload: bytes, signature: str | None) -> dict[str, str]:
@@ -380,13 +364,16 @@ def handle_webhook(payload: bytes, signature: str | None) -> dict[str, str]:
         amount = int(obj.get("amount") or 0)
         refunded = int(obj.get("amount_refunded") or 0)
         reason = "refunded" if amount > 0 and refunded >= amount else "refund_review"
-        changed = _suspend_charge_customer(obj, reason)
-        outcome = record_stripe_event(str(event_id), int(event.get("created") or 0), event_type)
-        logger.warning("Suspended %s API key(s) for Stripe refund event (%s).", changed, reason)
+        outcome = apply_customer_hold_event(
+            str(event_id), int(event.get("created") or 0), event_type, _charge_customer_id(obj), reason
+        )
+        logger.warning("Stripe refund event processed (%s): %s.", reason, outcome)
     elif event_type in {"charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed"}:
-        changed = _suspend_charge_customer(obj, "disputed")
-        outcome = record_stripe_event(str(event_id), int(event.get("created") or 0), event_type)
-        logger.warning("Suspended %s API key(s) pending manual review of Stripe dispute.", changed)
+        outcome = apply_customer_hold_event(
+            str(event_id), int(event.get("created") or 0), event_type,
+            _charge_customer_id(obj), _dispute_hold_reason(event_type, obj),
+        )
+        logger.warning("Stripe dispute event %s processed: %s.", event_type, outcome)
     elif event_type in {"invoice.payment_failed", "invoice.paid"}:
         subscription_id = _invoice_subscription_id(obj)
         if subscription_id:

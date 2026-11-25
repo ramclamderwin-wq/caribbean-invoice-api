@@ -13,6 +13,14 @@ from typing import Any
 from cryptography.fernet import Fernet, InvalidToken
 
 DEFAULT_MONTHLY_LIMIT = int(os.getenv("DEFAULT_MONTHLY_LIMIT", "1000"))
+SCHEMA_VERSION = 2
+# Statuses that versions <= 0.3.0 wrote into subscription_status for holds.
+LEGACY_HOLD_STATUSES = ("refunded", "refund_review", "disputed")
+# Subscription statuses that grant API access (past_due only within grace).
+ACCESS_GRANTING_STATUSES = ("active", "trialing", "past_due")
+# SQL guard: a revoked key or one under an access hold never regains access
+# from a Stripe event. Only an administrator clears a hold.
+_ACCESS_BLOCKED_SQL = "(revoked_at IS NOT NULL OR access_hold_reason IS NOT NULL)"
 
 
 class UsageLimitExceeded(Exception):
@@ -75,9 +83,24 @@ def init_db() -> None:
             "past_due_since": "TEXT",
             "current_period_start": "TEXT",
             "current_period_end": "TEXT",
+            # Access controls kept separate from Stripe's subscription status.
+            "access_hold_reason": "TEXT",
+            "access_hold_set_at": "TEXT",
+            "hold_review_cutoff": "INTEGER",
+            "revoked_at": "TEXT",
         }.items():
             if name not in columns:
                 conn.execute(f"ALTER TABLE api_keys ADD COLUMN {name} {definition}")
+        # One-time, non-destructive data migration: earlier versions stored
+        # refund/dispute holds in subscription_status. Copy them into the hold
+        # column; the next Stripe subscription event restores the true status.
+        legacy_holds = ",".join("?" for _ in LEGACY_HOLD_STATUSES)
+        conn.execute(
+            f"""UPDATE api_keys SET access_hold_reason=subscription_status,
+                access_hold_set_at=COALESCE(access_hold_set_at,?), active=0
+                WHERE access_hold_reason IS NULL AND subscription_status IN ({legacy_holds})""",
+            (datetime.now(timezone.utc).isoformat(), *LEGACY_HOLD_STATUSES),
+        )
         conn.execute("""CREATE TABLE IF NOT EXISTS checkout_claims (
             checkout_session_id TEXT PRIMARY KEY,
             api_key_id INTEGER NOT NULL UNIQUE,
@@ -103,6 +126,16 @@ def init_db() -> None:
         conn.execute("""CREATE TABLE IF NOT EXISTS stripe_webhook_events (
             event_id TEXT PRIMARY KEY, event_created INTEGER NOT NULL,
             event_type TEXT NOT NULL, received_at TEXT NOT NULL)""")
+        event_columns = {row["name"] for row in conn.execute("PRAGMA table_info(stripe_webhook_events)").fetchall()}
+        for name in ("customer_id", "outcome"):
+            if name not in event_columns:
+                conn.execute(f"ALTER TABLE stripe_webhook_events ADD COLUMN {name} TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_stripe_events_customer ON stripe_webhook_events(customer_id,event_created)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS admin_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL,
+            actor TEXT NOT NULL, action TEXT NOT NULL, target TEXT,
+            detail TEXT, client_hash TEXT, success INTEGER NOT NULL)""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_admin_audit_time ON admin_audit_log(created_at)")
         conn.execute("""CREATE TABLE IF NOT EXISTS stripe_subscription_state (
             subscription_id TEXT PRIMARY KEY, last_event_created INTEGER NOT NULL)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS public_rate_limit_events (
@@ -120,6 +153,7 @@ def init_db() -> None:
                 conn.execute(f"ALTER TABLE api_key_recovery_codes ADD COLUMN {name} TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_recovery_email ON api_key_recovery_codes(email,created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_public_rate_limits ON public_rate_limit_events(subject_hash,action,created_at)")
+        conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
 
 def hash_key(api_key: str) -> str:
@@ -152,50 +186,54 @@ def _api_key_fernet() -> Fernet:
 
 def provision_checkout_key(
     session_id: str, email: str, plan: str, customer_id: str,
-    subscription_id: str, monthly_limit: int, *, claim: bool = False,
+    subscription_id: str, monthly_limit: int, *,
     current_period_start: str | None = None, current_period_end: str | None = None,
 ) -> str:
-    """Create once and keep the raw key encrypted so webhook retries can deliver it."""
+    """Create once and keep the raw key encrypted so webhook retries can deliver it.
+
+    The signed Stripe webhook is the only caller; the key is delivered by email.
+    """
     fernet = _api_key_fernet()
     now = datetime.now(timezone.utc).isoformat()
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         existing = conn.execute(
-            """SELECT encrypted_api_key,browser_claimed_at FROM checkout_claims
-               WHERE checkout_session_id=?""",
+            "SELECT encrypted_api_key FROM checkout_claims WHERE checkout_session_id=?",
             (session_id,),
         ).fetchone()
         if existing:
-            if claim and existing["browser_claimed_at"] is not None:
-                raise ValueError("This checkout session's API key has already been claimed in the browser. Check the delivery email.")
             encrypted = existing["encrypted_api_key"]
             if not encrypted:
                 raise RuntimeError("The existing checkout key cannot be recovered securely. Contact support.")
             try:
-                raw_key = fernet.decrypt(encrypted.encode("ascii")).decode("utf-8")
+                return fernet.decrypt(encrypted.encode("ascii")).decode("utf-8")
             except (InvalidToken, ValueError) as exc:
                 raise RuntimeError("The checkout key could not be decrypted. Check API_KEY_ENCRYPTION_KEY.") from exc
-            if claim:
-                conn.execute(
-                    "UPDATE checkout_claims SET browser_claimed_at=? WHERE checkout_session_id=?",
-                    (now, session_id),
-                )
-            return raw_key
 
+        # A Stripe customer already under a billing hold (refund/dispute) keeps
+        # that hold on any new subscription until an administrator reviews it.
+        held = conn.execute(
+            """SELECT access_hold_reason FROM api_keys WHERE stripe_customer_id=?
+               AND access_hold_reason IS NOT NULL ORDER BY id DESC LIMIT 1""",
+            (customer_id,),
+        ).fetchone()
+        hold_reason = held["access_hold_reason"] if held else None
         raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
         encrypted = fernet.encrypt(raw_key.encode("utf-8")).decode("ascii")
         cursor = conn.execute(
             """INSERT INTO api_keys(label,key_hash,monthly_limit,active,created_at,plan,
-               stripe_customer_id,subscription_id,current_period_start,current_period_end)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (email, hash_key(raw_key), monthly_limit, 1, now, plan, customer_id, subscription_id,
-             current_period_start, current_period_end),
+               stripe_customer_id,subscription_id,current_period_start,current_period_end,
+               access_hold_reason,access_hold_set_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (email, hash_key(raw_key), monthly_limit, 0 if hold_reason else 1, now, plan,
+             customer_id, subscription_id, current_period_start, current_period_end,
+             hold_reason, now if hold_reason else None),
         )
         conn.execute(
             """INSERT INTO checkout_claims(
-               checkout_session_id,api_key_id,claimed_at,encrypted_api_key,
-               browser_claimed_at,delivery_email) VALUES (?,?,?,?,?,?)""",
-            (session_id, cursor.lastrowid, now, encrypted, now if claim else None, email),
+               checkout_session_id,api_key_id,claimed_at,encrypted_api_key,delivery_email)
+               VALUES (?,?,?,?,?)""",
+            (session_id, cursor.lastrowid, now, encrypted, email),
         )
     return raw_key
 
@@ -269,7 +307,9 @@ def mark_checkout_email_sent(session_id: str) -> None:
 def get_key_record(api_key: str) -> dict[str, Any] | None:
     with _connect() as conn:
         row = conn.execute(
-            "SELECT id,label,monthly_limit,active,plan,stripe_customer_id,subscription_id,subscription_status,past_due_since FROM api_keys WHERE key_hash=?",
+            """SELECT id,label,monthly_limit,active,plan,stripe_customer_id,subscription_id,
+               subscription_status,past_due_since,access_hold_reason,revoked_at
+               FROM api_keys WHERE key_hash=?""",
             (hash_key(api_key),)).fetchone()
     return dict(row) if row else None
 
@@ -396,10 +436,6 @@ def requests_in_last_minute(key_id: int) -> int:
     return int(row["used"])
 
 
-# Statuses set by suspend_customer_access; only manual review clears them.
-BILLING_HOLD_STATUSES = ("refunded", "refund_review", "disputed")
-
-
 def _subscription_access_state(status: str) -> tuple[int, str | None]:
     now = datetime.now(timezone.utc).isoformat()
     if status in {"active", "trialing"}:
@@ -413,7 +449,7 @@ def get_key_record_by_customer_id(customer_id: str) -> dict[str, Any] | None:
     with _connect() as conn:
         row = conn.execute(
             """SELECT id,label,monthly_limit,active,plan,stripe_customer_id,
-               subscription_id,subscription_status,past_due_since
+               subscription_id,subscription_status,past_due_since,access_hold_reason,revoked_at
                FROM api_keys WHERE stripe_customer_id=? ORDER BY id DESC LIMIT 1""",
             (customer_id,),
         ).fetchone()
@@ -448,15 +484,111 @@ def delete_customer_local_data(key_id: int) -> int:
 
 
 def suspend_customer_access(customer_id: str, reason: str) -> int:
-    """Disable every API key tied to a Stripe customer pending billing review."""
+    """Place an access hold on every key for a Stripe customer.
+
+    The Stripe subscription status is left untouched so it stays accurate.
+    """
+    now = datetime.now(timezone.utc).isoformat()
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         cursor = conn.execute(
-            """UPDATE api_keys SET active=0,subscription_status=?,past_due_since=NULL
+            """UPDATE api_keys SET active=0,access_hold_reason=?,
+               access_hold_set_at=COALESCE(access_hold_set_at,?)
                WHERE stripe_customer_id=?""",
-            (reason, customer_id),
+            (reason, now, customer_id),
         )
         return int(cursor.rowcount)
+
+
+def apply_customer_hold_event(
+    event_id: str, event_created: int, event_type: str,
+    customer_id: str, reason: str | None,
+) -> str:
+    """Atomically deduplicate a refund/dispute event and apply its hold.
+
+    - A redelivered event (same ID) never acts twice.
+    - An event created at or before an administrator's last hold review for
+      this customer is recorded but cannot re-suspend the account.
+    - ``reason=None`` records the event without changing access (for example
+      a dispute won by the merchant: an existing hold is kept for review).
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM stripe_webhook_events WHERE event_id=?", (event_id,)).fetchone():
+            return "duplicate"
+        cutoff = conn.execute(
+            "SELECT MAX(hold_review_cutoff) AS c FROM api_keys WHERE stripe_customer_id=?",
+            (customer_id,),
+        ).fetchone()["c"]
+        if reason is None:
+            outcome = "recorded"
+        elif cutoff is not None and int(event_created) <= int(cutoff):
+            outcome = "ignored_after_review"
+        else:
+            changed = conn.execute(
+                """UPDATE api_keys SET active=0,access_hold_reason=?,
+                   access_hold_set_at=COALESCE(access_hold_set_at,?)
+                   WHERE stripe_customer_id=?""",
+                (reason, now, customer_id),
+            ).rowcount
+            outcome = "hold_applied" if changed else "no_matching_customer"
+        conn.execute(
+            """INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at,customer_id,outcome)
+               VALUES (?,?,?,?,?,?)""",
+            (event_id, int(event_created), event_type, now, customer_id, outcome),
+        )
+    return outcome
+
+
+def place_access_hold(key_id: int, reason: str) -> int:
+    """Administrator hold on a key (and every key of the same Stripe customer)."""
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT stripe_customer_id FROM api_keys WHERE id=?", (key_id,)).fetchone()
+        if not row:
+            return 0
+        where, args = (("stripe_customer_id=?", (row["stripe_customer_id"],))
+                       if row["stripe_customer_id"] else ("id=?", (key_id,)))
+        cursor = conn.execute(
+            f"""UPDATE api_keys SET active=0,access_hold_reason=?,
+                access_hold_set_at=COALESCE(access_hold_set_at,?) WHERE {where}""",
+            (reason, now, *args),
+        )
+        return int(cursor.rowcount)
+
+
+def clear_access_hold(key_id: int) -> int:
+    """Lift a hold after manual review (customer-wide for Stripe customers).
+
+    Access is restored only if Stripe's subscription status still grants it
+    and the key was not revoked. Stripe events created before this moment can
+    no longer re-apply a refund/dispute hold.
+    """
+    import time
+    granting = ",".join("?" for _ in ACCESS_GRANTING_STATUSES)
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT stripe_customer_id FROM api_keys WHERE id=?", (key_id,)).fetchone()
+        if not row:
+            return 0
+        where, args = (("stripe_customer_id=?", (row["stripe_customer_id"],))
+                       if row["stripe_customer_id"] else ("id=?", (key_id,)))
+        cursor = conn.execute(
+            f"""UPDATE api_keys SET access_hold_reason=NULL,access_hold_set_at=NULL,
+                hold_review_cutoff=?,
+                active=CASE WHEN revoked_at IS NULL AND subscription_status IN ({granting}) THEN 1 ELSE 0 END
+                WHERE {where} AND access_hold_reason IS NOT NULL""",
+            (int(time.time()), *ACCESS_GRANTING_STATUSES, *args),
+        )
+        return int(cursor.rowcount)
+
+
+def expire_past_due_access(key_id: int) -> None:
+    """End access after the payment grace period; a later paid invoice restores it."""
+    with _connect() as conn:
+        conn.execute("UPDATE api_keys SET active=0 WHERE id=?", (key_id,))
 
 
 def _recovery_code_hash(code: str) -> str:
@@ -575,7 +707,9 @@ def set_subscription(key_id: int, plan: str, status: str, customer_id: str | Non
                      current_period_end: str | None = None) -> None:
     active, past_due_since = _subscription_access_state(status)
     with _connect() as conn:
-        conn.execute("""UPDATE api_keys SET plan=?,active=?,monthly_limit=?,stripe_customer_id=?,
+        conn.execute(f"""UPDATE api_keys SET plan=?,
+                     active=CASE WHEN {_ACCESS_BLOCKED_SQL} THEN 0 ELSE ? END,
+                     monthly_limit=?,stripe_customer_id=?,
                      subscription_id=?,subscription_status=?,
                      past_due_since=CASE WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END,
                      current_period_start=COALESCE(?,current_period_start),
@@ -589,7 +723,9 @@ def set_subscription_by_id(subscription_id: str, status: str,
                             plan: str | None = None, monthly_limit: int | None = None) -> None:
     active, past_due_since = _subscription_access_state(status)
     with _connect() as conn:
-        conn.execute("""UPDATE api_keys SET active=?,subscription_status=?,
+        conn.execute(f"""UPDATE api_keys SET
+                     active=CASE WHEN {_ACCESS_BLOCKED_SQL} THEN 0 ELSE ? END,
+                     subscription_status=?,
                      past_due_since=CASE WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END,
                      plan=COALESCE(?,plan),monthly_limit=COALESCE(?,monthly_limit)
                      WHERE subscription_id=?""",
@@ -616,47 +752,45 @@ def apply_stripe_subscription_event(
         ).fetchone()
         if last and int(event_created) < int(last["last_event_created"]):
             conn.execute(
-                "INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at) VALUES (?,?,?,?)",
-                (event_id, int(event_created), event_type, now),
+                """INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at,customer_id,outcome)
+                   VALUES (?,?,?,?,?,?)""",
+                (event_id, int(event_created), event_type, now, customer_id, "stale"),
             )
             return "stale"
-        # Refund/dispute holds are lifted only by manual review: a routine
-        # "active" subscription or invoice.paid event must not restore access.
-        holds = ",".join("?" for _ in BILLING_HOLD_STATUSES)
+        # subscription_status always mirrors Stripe. Holds and revocations are
+        # separate columns that no subscription event can clear.
         conn.execute(f"""UPDATE api_keys SET
-                     active=CASE WHEN subscription_status IN ({holds}) THEN 0 ELSE ? END,
-                     past_due_since=CASE WHEN subscription_status IN ({holds}) THEN NULL
-                         WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END,
-                     subscription_status=CASE WHEN subscription_status IN ({holds})
-                         THEN subscription_status ELSE ? END,
+                     active=CASE WHEN {_ACCESS_BLOCKED_SQL} THEN 0 ELSE ? END,
+                     subscription_status=?,
+                     past_due_since=CASE WHEN ?='past_due' THEN COALESCE(past_due_since,?) ELSE NULL END,
                      plan=COALESCE(?,plan),monthly_limit=COALESCE(?,monthly_limit),
                      stripe_customer_id=COALESCE(?,stripe_customer_id),
                      current_period_start=COALESCE(?,current_period_start),
                      current_period_end=COALESCE(?,current_period_end)
                      WHERE subscription_id=?""",
-                     (*BILLING_HOLD_STATUSES, active,
-                      *BILLING_HOLD_STATUSES, status, past_due_since,
-                      *BILLING_HOLD_STATUSES, status,
-                      plan, monthly_limit, customer_id,
+                     (active, status, status, past_due_since, plan, monthly_limit, customer_id,
                       current_period_start, current_period_end, subscription_id))
         conn.execute("""INSERT INTO stripe_subscription_state(subscription_id,last_event_created)
                      VALUES (?,?) ON CONFLICT(subscription_id) DO UPDATE SET
                      last_event_created=MAX(last_event_created,excluded.last_event_created)""",
                      (subscription_id, int(event_created)))
         conn.execute(
-            "INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at) VALUES (?,?,?,?)",
-            (event_id, int(event_created), event_type, now),
+            """INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at,customer_id,outcome)
+               VALUES (?,?,?,?,?,?)""",
+            (event_id, int(event_created), event_type, now, customer_id, "applied:" + status),
         )
     return "applied"
 
 
-def record_stripe_event(event_id: str, event_created: int, event_type: str) -> str:
+def record_stripe_event(event_id: str, event_created: int, event_type: str,
+                        customer_id: str | None = None, outcome: str = "recorded") -> str:
     now = datetime.now(timezone.utc).isoformat()
     with _connect() as conn:
         try:
             conn.execute(
-                "INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at) VALUES (?,?,?,?)",
-                (event_id, int(event_created), event_type, now),
+                """INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at,customer_id,outcome)
+                   VALUES (?,?,?,?,?,?)""",
+                (event_id, int(event_created), event_type, now, customer_id, outcome),
             )
         except sqlite3.IntegrityError:
             return "duplicate"
@@ -674,5 +808,9 @@ def rotate_api_key(key_id: int) -> str:
 
 
 def revoke_api_key(key_id: int) -> None:
+    """Permanently disable this key. Stripe events can never re-enable it."""
     with _connect() as conn:
-        conn.execute("UPDATE api_keys SET active=0 WHERE id=?", (key_id,))
+        conn.execute(
+            "UPDATE api_keys SET active=0,revoked_at=COALESCE(revoked_at,?) WHERE id=?",
+            (datetime.now(timezone.utc).isoformat(), key_id),
+        )
