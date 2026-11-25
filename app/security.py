@@ -358,6 +358,12 @@ def reserve_request_event(key_id: int, requests_per_minute: int) -> None:
             "INSERT INTO api_request_events(api_key_id,created_at) VALUES (?,?)",
             (key_id, now.isoformat()),
         )
+        # Only the last minute matters for throttling; keep an hour, drop the rest
+        # so this table does not grow forever.
+        conn.execute(
+            "DELETE FROM api_request_events WHERE api_key_id=? AND created_at<?",
+            (key_id, (now - timedelta(hours=1)).isoformat()),
+        )
 
 
 def reserve_usage(

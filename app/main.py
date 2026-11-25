@@ -26,7 +26,7 @@ from app.security import (
     UsageLimitExceeded, get_key_record, init_db, key_usage,
     reserve_usage, reserve_request_event, release_usage_reservation, reserve_public_rate_limit,
     rotate_api_key, revoke_api_key, database_health_check, delete_customer_local_data,
-    expire_past_due_access,
+    expire_past_due_access, count_public_rate_limit,
 )
 from app.billing import (
     create_checkout_session, create_portal_session, handle_webhook,
@@ -40,6 +40,10 @@ APP_NAME = "Quillvora API"
 logger = logging.getLogger("invoice_api")
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 MAX_WEBHOOK_BODY_BYTES = int(os.getenv("MAX_WEBHOOK_BODY_BYTES", str(1024 * 1024)))
+# Every other endpoint (JSON bodies such as /v1/extract-text, at most 200,000
+# characters) is capped too, so oversized bodies are never buffered in memory.
+MAX_JSON_BODY_BYTES = int(os.getenv("MAX_JSON_BODY_BYTES", str(1024 * 1024)))
+_UPLOAD_PATHS = {"/v1/extract-file", "/v1/extract-pdf"}
 MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "20"))
 MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "25000000"))
 MAX_PDF_PAGE_PIXELS = int(os.getenv("MAX_PDF_PAGE_PIXELS", "16000000"))
@@ -84,7 +88,7 @@ app = FastAPI(
     title=APP_NAME,
     lifespan=lifespan,
     description="Quillvora extracts structured invoice data from text, PDFs, scanned PDFs, and invoice photos. Verify every result against the original.",
-    version="0.3.0",
+    version="0.4.0",
 )
 class UploadBodySizeLimitMiddleware:
     """Reject oversized upload bodies before multipart parsing can spool them."""
@@ -94,11 +98,16 @@ class UploadBodySizeLimitMiddleware:
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path")
-        if scope["type"] != "http" or path not in {"/v1/extract-file", "/v1/extract-pdf", "/v1/billing/webhook"}:
+        if scope["type"] != "http":
             await self.application(scope, receive, send)
             return
 
-        body_limit = MAX_WEBHOOK_BODY_BYTES if path == "/v1/billing/webhook" else self.max_bytes
+        if path == "/v1/billing/webhook":
+            body_limit = MAX_WEBHOOK_BODY_BYTES
+        elif path in _UPLOAD_PATHS:
+            body_limit = self.max_bytes
+        else:
+            body_limit = MAX_JSON_BODY_BYTES
         headers = dict(scope.get("headers", []))
         content_length = headers.get(b"content-length")
         if content_length:
@@ -182,10 +191,19 @@ class RecoveryConfirmRequest(BaseModel):
 HOLD_DETAIL = "API access is suspended pending a billing review. Contact support."
 
 
-def _active_key_record(authorization: str | None) -> dict[str, Any]:
+def _active_key_record(authorization: str | None, request: Request | None = None) -> dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="A valid Bearer API key is required.")
+    ip = client_ip(request) if request is not None else None
+    limit = int(os.getenv("INVALID_KEY_RATE_LIMIT", "30"))
+    if ip and count_public_rate_limit(ip, "invalid_api_key", 60) >= limit:
+        raise HTTPException(status_code=429, detail="Too many invalid API key attempts. Please wait and try again.")
     record = get_key_record(authorization[7:].strip())
+    if not record and ip:
+        try:
+            reserve_public_rate_limit(ip, "invalid_api_key", limit + 1, 60)
+        except UsageLimitExceeded:
+            pass
     if not record or record.get("revoked_at"):
         raise HTTPException(status_code=401, detail="API key is invalid or inactive.")
     if record.get("access_hold_reason"):
@@ -195,8 +213,8 @@ def _active_key_record(authorization: str | None) -> dict[str, Any]:
     return record
 
 
-def require_api_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    record = _active_key_record(authorization)
+def require_api_key(request: Request, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    record = _active_key_record(authorization, request)
     if record.get("subscription_status") == "past_due":
         started = record.get("past_due_since")
         grace_hours = int(os.getenv("PAYMENT_GRACE_HOURS", "72"))
@@ -226,8 +244,8 @@ def require_deletion_key(authorization: str | None = Header(default=None)) -> di
     return record
 
 
-def require_billing_key(authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    return _active_key_record(authorization)
+def require_billing_key(request: Request, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    return _active_key_record(authorization, request)
 
 
 def _throttle_public_request(request: Request, action: str, default_limit: int, window_seconds: int) -> None:
@@ -245,7 +263,9 @@ def billing_checkout(body: CheckoutRequest, http_request: Request) -> dict[str, 
     try:
         url = create_checkout_session(body.plan, body.email)
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        # The specific configuration problem is for operators, not the public.
+        logger.error("checkout_unavailable reason=%s", exc)
+        raise HTTPException(status_code=503, detail="Checkout is temporarily unavailable. Please try again later.") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to create Stripe Checkout session.") from exc
     return {"checkout_url": url}
@@ -276,7 +296,8 @@ def billing_recovery_request(body: RecoveryRequest, response: Response, http_req
     except UsageLimitExceeded as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logger.error("recovery_unavailable reason=%s", exc)
+        raise HTTPException(status_code=503, detail="Key recovery is temporarily unavailable. Please try again later.") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to process the recovery request right now.") from exc
     return {"message": "If an eligible subscription exists for that email, a verification code has been sent."}
@@ -292,7 +313,8 @@ def billing_recovery_confirm(body: RecoveryConfirmRequest, response: Response, h
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logger.error("recovery_unavailable reason=%s", exc)
+        raise HTTPException(status_code=503, detail="Key recovery is temporarily unavailable. Please try again later.") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to complete key recovery right now.") from exc
     return {"message": "Your API key has been rotated and sent to your verified email address."}
@@ -327,7 +349,8 @@ def billing_portal(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logger.error("portal_unavailable reason=%s", exc)
+        raise HTTPException(status_code=503, detail="The billing portal is temporarily unavailable. Please try again later.") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Unable to create Stripe customer portal session.") from exc
     return {"portal_url": url}
@@ -551,7 +574,7 @@ async def add_security_headers(request: Request, call_next):
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"name": APP_NAME, "version": "0.3.0", "dashboard": "/dashboard", "docs": "/docs", "health": "/health"}
+    return {"name": APP_NAME, "version": "0.4.0", "dashboard": "/dashboard", "docs": "/docs", "health": "/health"}
 
 
 @app.get("/dashboard", include_in_schema=False)

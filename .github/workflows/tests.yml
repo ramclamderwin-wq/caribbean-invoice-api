@@ -24,6 +24,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
+      - name: Audit dependencies for known vulnerabilities
+        run: |
+          pip install pip-audit bandit
+          pip-audit -r requirements.txt --progress-spinner off
+      - name: Static security analysis (fail on high severity)
+        run: bandit -q -r app -lll
       - name: Build production Docker image
         run: docker build -t invoice-api-ci .
       - name: Smoke-test the production Docker image
