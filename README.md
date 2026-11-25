@@ -10,7 +10,7 @@ A global invoice extraction API from Quillvora, built for businesses and develop
 - Accept PDF, PNG, JPG/JPEG, WEBP, TIFF, and BMP uploads.
 - OCR scanned PDFs and phone photos with Tesseract (English and Spanish language data in the Docker image).
 - Detect explicit currency codes and symbols including BZD; ambiguous dollar symbols remain unknown.
-- Return warnings when required fields are missing or subtotal plus tax does not match the total.
+- Return warnings when required fields are missing, the date is ambiguous, the document looks like a credit note, or subtotal − discount + shipping + tax does not match the total.
 - Enforce upload-size and PDF-page limits.
 - Process uploads in memory; the API does not save invoice files to disk.
 
@@ -63,7 +63,7 @@ curl -X POST http://127.0.0.1:8000/v1/extract-file \
   -F "file=@invoice-scan.pdf"
 ```
 
-The response contains `fields`, `confidence`, `confidence_type`, `warnings`, `review_required`, `extraction_metadata`, and `source` metadata. Confidence is currently unavailable (null) because it has not been calibrated against a representative labelled invoice corpus. Every result must be reviewed against the original.
+The response contains `fields` (`supplier_name`, `invoice_number`, `invoice_date`, `currency`, `subtotal`, `tax`, `discount`, `shipping`, `total`), `confidence`, `confidence_type`, `warnings`, `review_required` (always true), `fields_needing_review` (missing, ambiguous or inconsistent fields to check first), `extraction_metadata` (including `document_type`: `invoice` or `credit_note`), and `source` metadata. Confidence is currently unavailable (null) because it has not been calibrated against a representative labelled invoice corpus. Every result must be reviewed against the original.
 
 ## Configuration
 

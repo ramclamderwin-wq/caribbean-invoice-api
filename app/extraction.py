@@ -237,7 +237,15 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
     supplier = _supplier(lines)
 
     subtotal = _label_amount(text, r"(?:sub\s*total|subtotal|sous\s*total|subtotal)")
-    tax = _label_amount(text, r"(?:tax|gst|vat|sales\s+tax|iva|impuesto|impuestos)")
+    # Prefer a plain tax line; fall back to "Total Tax"/"Total VAT" only when no
+    # plain line exists. (The total label never matches "Total Tax".)
+    tax = _label_amount(text, r"(?:sales\s+tax|tax|gst|vat|iva|impuestos|impuesto)") or _label_amount(
+        text, r"(?:total\s+(?:tax|vat|gst|iva)|(?:tax|vat|gst)\s+total)"
+    )
+    discount = _label_amount(text, r"(?:less\s+discount|discount|descuento|rebate)")
+    shipping = _label_amount(
+        text, r"(?:shipping(?:\s+(?:and|&)\s+handling)?|freight|delivery(?:\s+charge)?|handling|env[ií]o|flete)"
+    )
     total = _label_amount(
         text,
         r"(?:grand\s+total|total\s+due|amount\s+due|balance\s+due|invoice\s+total|total\s+a\s+pagar|importe\s+total|total)",
@@ -276,6 +284,8 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
         "currency": currency,
         "subtotal": subtotal,
         "tax": tax,
+        "discount": discount,
+        "shipping": shipping,
         "total": total,
     }
     warnings: list[str] = []
@@ -292,13 +302,26 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
     if re.search(r"\b(?:due\s+date|fecha\s+de\s+vencimiento)\b", text, re.I) and not date_label_found:
         warnings.append("Only a due date may be present; it was not used as the invoice date.")
 
+    review_fields = {name for name in ("supplier_name", "invoice_number", "invoice_date", "currency", "total")
+                     if fields[name] is None}
     if subtotal is not None and tax is not None and total is not None:
-        difference = Decimal(subtotal) + Decimal(tax) - Decimal(total)
-        if abs(difference) > Decimal("0.02"):
+        # Discounts are subtracted whether printed as "-100.00" or "100.00".
+        expected = (Decimal(subtotal) - abs(Decimal(discount or "0"))
+                    + Decimal(shipping or "0") + Decimal(tax))
+        if abs(expected - Decimal(total)) > Decimal("0.02"):
             warnings.append(
-                "Subtotal plus tax does not equal the extracted total; check discounts, "
-                "shipping, fees, rounding, and the original invoice."
+                "Subtotal plus tax (less discount, plus shipping) does not equal the extracted total; "
+                "check discounts, shipping, fees, rounding, and the original invoice."
             )
+            review_fields.update({"subtotal", "tax", "total"})
+
+    document_type = "invoice"
+    if re.search(r"\b(?:credit\s+(?:note|memo)|nota\s+de\s+cr[eé]dito)\b", text, re.I) or (
+        total is not None and Decimal(total) < 0
+    ):
+        document_type = "credit_note"
+        warnings.append("This looks like a credit note or refund; amounts may be negative. Verify before posting.")
+        review_fields.add("total")
 
     # Confidence is intentionally unavailable until calibrated against a
     # representative, labelled invoice corpus. Do not fabricate a score.
@@ -309,8 +332,12 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
         "confidence_type": "not_available_not_calibrated",
         "warnings": warnings,
         "review_required": True,
+        # Fields that are missing, ambiguous or inconsistent. Every result still
+        # needs human review; these need it most.
+        "fields_needing_review": sorted(review_fields),
         "extraction_metadata": {
             "method": "rule_based_text_extraction",
+            "document_type": document_type,
             "fields_found": sum(value is not None for value in fields.values()),
             "fields_expected": len(fields),
         },

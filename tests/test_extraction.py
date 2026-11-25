@@ -23,6 +23,8 @@ Grand Total: $1,080.00
         "currency": "USD",
         "subtotal": "1000.00",
         "tax": "80.00",
+        "discount": None,
+        "shipping": None,
         "total": "1080.00",
     }
     assert not result["warnings"]
@@ -73,12 +75,22 @@ def test_missing_fields_are_reported_and_not_fabricated():
     assert len(result["warnings"]) >= 4
 
 
-def test_discount_or_shipping_difference_is_flagged_for_human_review():
+def test_discount_and_shipping_are_extracted_and_reconciled():
     result = extract_invoice_fields(
         "ACME\nInvoice No: A-3\nDate: 2026-02-02\n"
         "Subtotal: 100.00\nTax: 8.00\nShipping: 5.00\nDiscount: 3.00\nTotal: 110.00"
     )
+    assert result["fields"]["discount"] == "3.00" and result["fields"]["shipping"] == "5.00"
+    assert not any("does not equal" in warning for warning in result["warnings"])
+
+
+def test_unexplained_difference_is_flagged_for_human_review():
+    result = extract_invoice_fields(
+        "ACME\nInvoice No: A-3\nDate: 2026-02-02\n"
+        "Subtotal: 100.00\nTax: 8.00\nService fee: 7.00\nTotal: 115.00"
+    )
     assert any("check discounts, shipping" in warning for warning in result["warnings"])
+    assert {"subtotal", "tax", "total"} <= set(result["fields_needing_review"])
 
 
 def test_confidence_is_not_presented_as_probability():
