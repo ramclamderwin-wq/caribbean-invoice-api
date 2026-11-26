@@ -48,6 +48,19 @@ Synthetic demo invoices only; no real customer data. No secrets are recorded her
   (`subtotal`, `tax`, `total` marked for review), and all 5 demo invoices still return the
   same totals with no false warnings (demo-001: 2,862 + 180 freight + 25 insurance = 3,067).
 
+## Defect found and fixed: client address behind Render's proxies
+- **Finding (independent audit, 2026-11-26):** with `TRUSTED_PROXY_HOPS=1`, the app recorded a
+  different *edge proxy* address on almost every request (19 admin requests → 16 fingerprints,
+  none matching the tester's real addresses). Per-IP protections were therefore ineffective on
+  Render: invalid-key throttle, checkout/recovery limits, admin lockout and audit attribution.
+- **Fix:** Render has two proxy layers; staging now uses `TRUSTED_PROXY_HOPS=2` and `render.yaml`
+  was corrected. **Verified on staging:** fingerprints match the tester's real addresses, and a
+  forged `X-Forwarded-For: 1.2.3.4` header is ignored. New unit tests pin the behaviour.
+- **Per-key limit:** verified on staging (60 requests/minute; request 61 → 429; rejected uploads not billed).
+- **Invalid-key throttle end-to-end:** not demonstrable from the test environment because its
+  outgoing traffic rotates across ~25 addresses (each stayed under the limit of 30/minute);
+  covered by unit tests plus the address verification above.
+
 ## Limits of what staging can show
 - Line-item extraction (`commercial_invoice.v1`) is a prototype and not exposed as an API
   endpoint, so line items and demo-004's line-level errors cannot be verified on staging.

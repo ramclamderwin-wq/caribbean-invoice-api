@@ -13,7 +13,7 @@ Stripe billing events, find stuck key emails and read the audit trail. It is
 | `ADMIN_AUTH_FAILURE_LIMIT` | Failed key attempts per client per hour before a 1-hour lockout (default 10). |
 | `ADMIN_RATE_LIMIT` | Admin requests per client per hour (default 300). |
 | `ADMIN_CREATE_KEY_RATE_LIMIT` | Manual key creations per client per hour (default 10). |
-| `TRUSTED_PROXY_HOPS` | Proxies in front of the app (Render: `1`). Used to find the real client IP for allowlists, rate limits and audit. |
+| `TRUSTED_PROXY_HOPS` | Proxies in front of the app (Render: `2`, verified on staging). Used to find the real client IP for allowlists, rate limits and audit. |
 
 Every admin request, including failed logins, is written to `admin_audit_log`
 with the actor name, action, target, a hashed client identifier and the result.

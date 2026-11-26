@@ -22,9 +22,10 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         value: ""
-      # Render terminates TLS with one proxy hop; used to find the real client IP.
+      # Render has TWO proxy layers in front of the app (verified on staging 2026-11-26:
+      # with 1, the app saw a changing edge address; with 2, the real client).
       - key: TRUSTED_PROXY_HOPS
-        value: "1"
+        value: "2"
       # Your office/VPN IPs or CIDRs for /v1/admin (strongly recommended).
       - key: ADMIN_ALLOWED_IPS
         sync: false

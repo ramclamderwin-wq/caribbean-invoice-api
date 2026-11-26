@@ -8,8 +8,9 @@ header.
 
 Instead, count ``TRUSTED_PROXY_HOPS`` entries from the *right*: each trusted
 proxy appends the address it received the connection from, so the entry that
-the nearest trusted proxy appended cannot be forged by the client. Render
-terminates connections with one proxy hop (the default). Set 0 when the app is
+the nearest trusted proxy appended cannot be forged by the client. Render has
+two proxy layers in front of the app, so set ``TRUSTED_PROXY_HOPS=2`` there
+(verified on staging); the code default of 1 suits a single reverse proxy. Set 0 when the app is
 reached directly (no proxy); then the socket peer address is used.
 """
 from __future__ import annotations

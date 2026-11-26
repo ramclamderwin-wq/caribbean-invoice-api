@@ -8,7 +8,7 @@ test. Commission one before open public launch.
 
 | # | Finding | Risk | Fix | Test |
 | --- | --- | --- | --- | --- |
-| 1 | Per-IP limits (checkout, recovery, admin) read the left-most `X-Forwarded-For` entry, which the client controls, because Uvicorn trusts all proxies. | Rate limits and allowlists bypassable with a forged header | `app/net.py` uses the proxy-appended entry (`TRUSTED_PROXY_HOPS`, Render = 1) | `test_admin.py` forged-header tests |
+| 1 | Per-IP limits (checkout, recovery, admin) read the left-most `X-Forwarded-For` entry, which the client controls, because Uvicorn trusts all proxies. | Rate limits and allowlists bypassable with a forged header | `app/net.py` uses the proxy-appended entry (`TRUSTED_PROXY_HOPS`, Render = 2; see item 4 below) | `test_admin.py` forged-header tests |
 | 2 | A renewal or subscription update re-enabled a key the customer had **revoked**. | Leaked or retired key silently works again | Separate `revoked_at`; no Stripe event can clear it | `test_revoked_key_is_never_reactivated_by_stripe` |
 | 3 | Refund/dispute holds were stored in `subscription_status`, and an earlier fix kept that value even after Stripe cancelled. | Wrong status shown to support; hold logic tangled with billing | Separate `access_hold_reason`; status mirrors Stripe | `test_lifecycle.py` |
 | 4 | Refund/dispute webhooks acted before deduplication; redelivered or delayed events could re-suspend after a manual review. | Wrongful suspension of paying customers | Atomic dedupe plus a review cutoff | `test_hold_events_are_idempotent_and_respect_manual_review` |
@@ -57,9 +57,13 @@ test. Commission one before open public launch.
 3. **Admin authentication is one shared key.** Fine for a single operator.
    Before adding staff, move to per-person credentials (SSO or individual keys)
    so the audit actor is authenticated, not self-declared.
-4. **`TRUSTED_PROXY_HOPS` must match the real network path.** Confirm on Render
-   staging (`RENDER_STAGING.md` has a check) and whenever a CDN is added in
-   front.
+4. **`TRUSTED_PROXY_HOPS` must match the real network path.** On Render it is
+   **2**, not 1. Verified on staging (2026-11-26) by comparing admin-audit client
+   fingerprints with the tester's known addresses: with 1, every request got a
+   different edge address, which silently disabled per-IP limits (invalid-key
+   throttle, checkout/recovery limits, admin lockout); with 2, the real client
+   address is used and a forged `X-Forwarded-For` is ignored. Re-check whenever a
+   CDN or another proxy is added in front.
 5. **Dependency pinning:** direct dependencies are pinned and audited in CI.
    Transitive dependencies are not locked yet; consider `pip-compile` with
    hashes.
