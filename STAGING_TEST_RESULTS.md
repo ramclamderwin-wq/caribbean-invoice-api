@@ -78,6 +78,13 @@ Known beta gaps on demo invoices: unit of measure is not captured; per-line orig
 | 35 | Scheduled backups enabled (`BACKUP_ENABLED=true`, every 24 h) | PASS (`scheduled: true`, `offsite_configured: true`, `encryption_configured: true`) |
 | 36 | Restore drill from the off-site copy into an isolated database | PASS (2026-11-26: newest R2 object `ramvora-20261126T202741215839Z` downloaded by the owner; SHA-256 matched the manifest; `python -m app.backup verify` ok; restored into a new scratch file, never over staging; `PRAGMA integrity_check` = ok, schema v2, 11 tables, all 6 customers with correct status/holds/revocation, webhook events, audit log and checkout records present, no raw keys stored). R2 lifecycle rule deletes objects after 400 days; local copies pruned 7 daily / 4 weekly / 12 monthly |
 
+## Company email domain (2026-11-26)
+| # | Test | Result |
+|---|---|---|
+| 37 | Resend sending domain `ramvora.io` (DKIM, SPF MX/TXT on `send`, return-path CNAME `rsend`) | PASS (status `verified`; tracking off) |
+| 38 | Test email from `no-reply@ramvora.io` to a forwarded company address | SENT (Resend accepted; delivery to the company inbox to be confirmed by the owner) |
+| 39 | Product sender switched to `FROM_EMAIL=RAMVORA <no-reply@ramvora.io>` | DONE (staging redeployed; key emails can now reach any customer address) |
+
 ## Limits of what staging can show
 - Line-item extraction is now available as a **beta** endpoint (tests 30-31); accuracy on real invoices is unmeasured.
 - Backup **restore** was not run on staging: it needs shell access to the server (not available
@@ -86,4 +93,3 @@ Known beta gaps on demo invoices: unit of measure is not captured; per-line orig
 ## Not yet tested on staging
 - Failed renewal / past-due grace (needs a Stripe test clock). Covered by unit tests.
 - `ADMIN_ALLOWED_IPS` not set yet (admin API is key-protected and rate-limited).
-- Sending email to addresses other than the Resend account owner: domain ramvora.io added to Resend, waiting for DNS records (status `not_started`).
