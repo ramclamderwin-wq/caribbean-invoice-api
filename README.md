@@ -1,4 +1,9 @@
-<p align="center"><img src="docs/brand/ramvora-wordmark.svg" alt="RAMVORA" width="320"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ramvora-wordmark-white.svg">
+    <img src="docs/brand/ramvora-wordmark.svg" alt="RAMVORA" width="320">
+  </picture>
+</p>
 
 <p align="center"><strong>RAMVORA Invoice Intelligence API</strong><br><em>Built for what's next.</em></p>
 
