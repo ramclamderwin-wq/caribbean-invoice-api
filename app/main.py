@@ -33,6 +33,7 @@ from app.billing import (
     request_api_key_recovery, confirm_api_key_recovery, cancel_customer_subscriptions,
 )
 from app.extraction import extract_invoice_fields
+from app.commercial_invoice import extract_commercial_invoice
 from app.admin import router as admin_router
 from app.net import client_ip
 
@@ -606,10 +607,12 @@ def extract_text(request: TextRequest, key_record: dict[str, Any] = Depends(requ
     return result
 
 
-@app.post("/v1/extract-file")
-async def extract_file(file: UploadFile = File(...), key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
-    # Rate-limit every attempt, but only reserve billable page units after the
-    # upload is validated and its page count is known.
+async def _extract_upload(file: UploadFile, key_record: dict[str, Any], extractor) -> dict[str, Any]:
+    """Shared upload pipeline: validate, bill by page, OCR/parse off the event loop, extract.
+
+    Rate-limit every attempt, but only reserve billable page units after the
+    upload is validated and its page count is known. Usage is released on failure.
+    """
     _record_request(key_record)
     filename = Path(file.filename or "upload").name
     suffix = Path(filename).suffix.lower()
@@ -634,12 +637,52 @@ async def extract_file(file: UploadFile = File(...), key_record: dict[str, Any] 
             )
         if not text.strip():
             raise HTTPException(status_code=422, detail="No readable text was found. Try a clearer scan or higher-resolution photo.")
-        result = extract_invoice_fields(text)
+        result = await run_in_threadpool(extractor, text)
         result["source"] = {"type": source_type, "filename": filename, "ocr_used": ocr_used, "pages": page_count}
         return result
     except Exception:
         release_usage_reservation(key_record["id"], reservation_id)
         raise
+
+
+@app.post("/v1/extract-file")
+async def extract_file(file: UploadFile = File(...), key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
+    return await _extract_upload(file, key_record, extract_invoice_fields)
+
+
+def _commercial_invoice_result(text: str) -> dict[str, Any]:
+    result = extract_commercial_invoice(text)
+    max_items = int(os.getenv("MAX_LINE_ITEMS", "500"))
+    if len(result["line_items"]) > max_items:
+        result["line_items"] = result["line_items"][:max_items]
+        result["line_items_truncated"] = True
+        result["issues"].append({"severity": "warning", "field": "line_items",
+                                 "message": f"Only the first {max_items} line items are returned."})
+        result["fields_needing_review"] = sorted(set(result["fields_needing_review"]) | {"line_items"})
+    result["extraction_metadata"]["status"] = "beta"
+    return result
+
+
+@app.post("/v1/commercial-invoice/extract-text", tags=["Commercial invoice (beta)"])
+def commercial_invoice_text(request: TextRequest, key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
+    """BETA: seller, buyer, trade terms and line items (schema commercial_invoice.v1) from text.
+
+    Values are never invented; HS codes are copied only when printed; every result needs review.
+    """
+    _record_request(key_record)
+    _reserve_page_usage(key_record, 1)
+    result = _commercial_invoice_result(request.text)
+    result["source"] = {"type": "text", "ocr_used": False}
+    return result
+
+
+@app.post("/v1/commercial-invoice/extract-file", tags=["Commercial invoice (beta)"])
+async def commercial_invoice_file(file: UploadFile = File(...), key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, Any]:
+    """BETA: commercial_invoice.v1 extraction (including line items) from a PDF or image.
+
+    Same upload limits, page billing and OCR as /v1/extract-file.
+    """
+    return await _extract_upload(file, key_record, _commercial_invoice_result)
 
 
 @app.post("/v1/extract-pdf", include_in_schema=False)

@@ -1,8 +1,9 @@
 """Commercial-invoice extraction (PROTOTYPE): header parties, trade terms and line items.
 
-Status: prototype for the customs-broker validation programme. It is not wired
-to a public endpoint yet. It reuses the existing header extractor
-(``app.extraction``) and adds the fields a customs broker needs.
+Status: BETA. Exposed as ``POST /v1/commercial-invoice/extract-text`` and
+``POST /v1/commercial-invoice/extract-file`` (same limits and page billing as the
+header endpoints). It reuses the existing header extractor (``app.extraction``)
+and adds the fields a customs broker needs.
 
 Principles
 - **Never invent values.** A field that is not printed on the invoice is

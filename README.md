@@ -58,6 +58,8 @@ uvicorn app.main:app --reload
 | POST | `/v1/extract-text` | Extract from JSON text |
 | POST | `/v1/extract-file` | Extract from PDF or image upload |
 | POST | `/v1/extract-pdf` | Backward-compatible PDF upload route |
+| POST | `/v1/commercial-invoice/extract-text` | **Beta.** Seller, buyer, trade terms and line items from JSON text |
+| POST | `/v1/commercial-invoice/extract-file` | **Beta.** Same, from a PDF or image upload |
 
 ### Extract text example
 
@@ -76,10 +78,29 @@ curl -X POST http://127.0.0.1:8000/v1/extract-file \
 
 The response contains `fields` (`supplier_name`, `invoice_number`, `invoice_date`, `currency`, `subtotal`, `tax`, `discount`, `shipping`, `total`), `confidence`, `confidence_type`, `warnings`, `review_required` (always true), `fields_needing_review` (missing, ambiguous or inconsistent fields to check first), `extraction_metadata` (including `document_type`: `invoice` or `credit_note`), and `source` metadata. Confidence is currently unavailable (null) because it has not been calibrated against a representative labelled invoice corpus. Every result must be reviewed against the original.
 
+### Commercial invoices with line items (beta)
+
+`POST /v1/commercial-invoice/extract-file` (multipart `file`) and
+`POST /v1/commercial-invoice/extract-text` (JSON `{"text": ...}`) return the
+`commercial_invoice.v1` schema: `seller`, `buyer`, `invoice_number`, `invoice_date`,
+`currency`, `incoterm`, `incoterm_place`, `country_of_origin`, `subtotal`, `discount`,
+`freight`, `insurance`, `tax`, `total`, `line_items` (description, SKU, quantity, unit of
+measure, unit price, line total, origin and `hs_code_as_printed` only when printed),
+`line_items_total`, `issues`, `fields_needing_review` and `review_required` (always true).
+
+- Same upload limits, OCR and **page billing** as `/v1/extract-file`; rejected uploads are not billed.
+- **Never invents values or tariff codes.** Row arithmetic and line-sum vs subtotal problems are
+  flagged in `issues`, never corrected.
+- At most `MAX_LINE_ITEMS` rows are returned (default 500; `line_items_truncated` is set beyond that).
+- Beta: rule-based table reading. Tables whose rows wrap onto several lines, rotated scans or rows
+  without a numeric quantity/price/total may be missed and are flagged for review. Accuracy on real
+  invoices has not been measured yet.
+
 ## Configuration
 
 - `MAX_UPLOAD_BYTES`: maximum invoice file size (default 15 MiB).
 - `MAX_WEBHOOK_BODY_BYTES`: maximum Stripe webhook request body (default 1 MiB).
+- `MAX_LINE_ITEMS`: maximum line items returned by the beta commercial-invoice endpoints (default 500).
 - `MAX_PDF_PAGES`: maximum PDF pages (default 20).
 - `MAX_IMAGE_PIXELS`: maximum image pixels (default 25 million).
 - `MAX_PDF_PAGE_PIXELS`: maximum rasterized pixels per scanned PDF page (default 16 million).
