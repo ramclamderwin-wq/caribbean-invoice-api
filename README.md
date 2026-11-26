@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ramvora-wordmark-white.svg">
-    <img src="docs/brand/ramvora-wordmark.svg" alt="RAMVORA" width="320">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ramvora-wordmark-white.svg?v=2">
+    <img src="docs/brand/ramvora-wordmark.svg?v=2" alt="RAMVORA" width="320">
   </picture>
 </p>
 
