@@ -85,6 +85,16 @@ Known beta gaps on demo invoices: unit of measure is not captured; per-line orig
 | 38 | Test email from `no-reply@ramvora.io` to a forwarded company address | SENT (Resend accepted; delivery to the company inbox to be confirmed by the owner) |
 | 39 | Product sender switched to `FROM_EMAIL=RAMVORA <no-reply@ramvora.io>` | DONE (staging redeployed; key emails can now reach any customer address) |
 
+## Stripe lifecycle re-tests (2026-11-26, evening)
+| # | Test | Result |
+|---|---|---|
+| 40 | Dispute re-test after fix `45a4836` (card 0259) | PASS: `charge.dispute.created` again arrived before `checkout.session.completed`; outcome `pending_hold_applied:disputed`; new customer created already held (`access_hold_reason=disputed`, inactive) |
+| 41 | Failed renewal (card 0341 set as the subscription's payment method) | SCHEDULED: forcing an immediate renewal via the API produced only a $0 proration invoice (flexible billing mode). The real renewal on 2026-12-26 will fail naturally; a check is scheduled for 2026-12-27 (grace period, past_due status, recovery). Covered by unit tests meanwhile. |
+
+**Admin IP allowlist:** not set. The owner's current address is a mobile-carrier IP that changes,
+so an allowlist would risk lockouts. Recommended: a fixed office IP or a VPN with a static exit IP
+(or keep the 32+ character admin key, lockout and audit log as the protection until then).
+
 ## Limits of what staging can show
 - Line-item extraction is now available as a **beta** endpoint (tests 30-31); accuracy on real invoices is unmeasured.
 - Backup **restore** was not run on staging: it needs shell access to the server (not available
