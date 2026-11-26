@@ -1,7 +1,7 @@
 # Staging test results (2026-11-26)
 
 Environment: Render web service `ramvora-api-zxug` (Starter, 1 GB disk, Oregon),
-branch `fix/production-readiness-p0-final`, commit `9d9d1e1`, auto-deploy off,
+branch `fix/production-readiness-p0-final`, tests 1–29 on commit `9d9d1e1`, fix re-verified on `3b9ae14`, auto-deploy off,
 Blueprint "RAMVORA staging" with auto-sync off. Stripe **test mode only**
 (webhook `we_1Ufud0KqMzLsvG4ZhHBKAqEX`, 12 events). Email via Resend test sender.
 Synthetic demo invoices only; no real customer data. No secrets are recorded here.
@@ -43,7 +43,10 @@ Synthetic demo invoices only; no real customer data. No secrets are recorded her
   (FOB + freight + insurance). Demo-001 showed an unexplained 25.00 (insurance) with no warning.
   Fix: the check now runs whenever subtotal and total exist (missing tax counts as zero) and
   includes insurance in the sum. Regression tests added (fail on the old code, pass on the new).
-  **Staging still runs the old code until the owner approves a redeploy.**
+  **Redeployed to staging with owner approval** (commit `3b9ae14`, deploy live 2026-11-26 06:44 UTC).
+  Verified on staging after the redeploy: the no-tax mismatch case is now flagged
+  (`subtotal`, `tax`, `total` marked for review), and all 5 demo invoices still return the
+  same totals with no false warnings (demo-001: 2,862 + 180 freight + 25 insurance = 3,067).
 
 ## Limits of what staging can show
 - Line-item extraction (`commercial_invoice.v1`) is a prototype and not exposed as an API
