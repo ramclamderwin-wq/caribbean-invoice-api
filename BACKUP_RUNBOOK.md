@@ -66,6 +66,42 @@ must differ from `API_KEY_ENCRYPTION_KEY`; the code refuses to run if they match
 7. Set up an alert: check `GET /v1/admin/backups` daily (or from monitoring) and
    alert if the newest successful run is older than 26 hours.
 
+### Choosing a provider (cost comparison, 2026-11)
+
+The database is tiny: one encrypted, compressed backup of staging is about 7 KB, and
+with 7 daily + 4 weekly + 12 monthly copies the bucket stays well under 1 GB even with
+thousands of customers. At this size every option below is **free or a few cents a
+month**. Prices are list prices as last known; **check the provider's pricing page
+before creating an account.**
+
+| Provider | Storage | Free allowance | Download (egress) | Fit |
+|---|---|---|---|---|
+| **Cloudflare R2** | about $0.015 per GB-month | 10 GB storage + 1M writes/month | free | **Recommended:** the company domain already uses Cloudflare; one account, no egress fees for restores |
+| Backblaze B2 | about $0.006 per GB-month | first 10 GB | free up to 3x stored data | Cheapest at scale; separate account |
+| AWS S3 Standard | about $0.023 per GB-month | 5 GB for 12 months (new accounts) | about $0.09 per GB | Most features, most setup; egress costs on restore |
+
+**Cloudflare R2 setup (owner, about 10 minutes, no card charge at this size):**
+1. Cloudflare dashboard → **R2** → enable it (R2 asks for a payment method even for the free tier).
+2. **Create bucket**, e.g. `ramvora-backups-staging`. Choose a location hint near the server (North America).
+3. **R2 → Manage API tokens → Create API token** → permission **Object Read & Write**, scoped to that bucket
+   only. R2 has no true write-only role, so keep a **separate, read-only token for restores** in your
+   password manager and use **bucket object lifecycle rules** for retention.
+4. In Render set `BACKUP_S3_BUCKET` (bucket name), `BACKUP_S3_ENDPOINT_URL`
+   (`https://<account-id>.r2.cloudflarestorage.com`), `BACKUP_S3_REGION=auto`,
+   `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, then `BACKUP_ENABLED=true`.
+5. Run `POST /v1/admin/backups/run` and confirm `uploaded_to` is set and the object appears in R2.
+
+### Restore drill into an isolated target (launch gate)
+
+Never restore over the live staging or production database for a drill.
+1. Download the newest `ramvora-*.sqlite3.gz.enc` and its `.json` manifest from the bucket
+   (read-only token) to a private folder on a trusted machine.
+2. In a fresh checkout, set `BACKUP_ENCRYPTION_KEY` (from the password manager) and
+   `DATABASE_PATH` to a **new, empty scratch file**, then run the restore command below.
+3. Check: the checksum matches the manifest, `PRAGMA integrity_check` returns `ok`, and the
+   customer and usage counts match the admin API's numbers at backup time.
+4. Record date, backup file name, checksum and result in the evidence table at the end of this runbook.
+
 ## Restore procedure
 
 Practise this on staging first; the commands are the same in production.
