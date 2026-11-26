@@ -246,6 +246,9 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
     shipping = _label_amount(
         text, r"(?:shipping(?:\s+(?:and|&)\s+handling)?|freight|delivery(?:\s+charge)?|handling|env[ií]o|flete)"
     )
+    # Insurance is not returned as a field yet, but it is part of the invoice sum
+    # (e.g. CIF-style commercial invoices), so the arithmetic check includes it.
+    insurance = _label_amount(text, r"(?:insurance|seguro)")
     total = _label_amount(
         text,
         r"(?:grand\s+total|total\s+due|amount\s+due|balance\s+due|invoice\s+total|total\s+a\s+pagar|importe\s+total|total)",
@@ -304,13 +307,16 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
 
     review_fields = {name for name in ("supplier_name", "invoice_number", "invoice_date", "currency", "total")
                      if fields[name] is None}
-    if subtotal is not None and tax is not None and total is not None:
+    if subtotal is not None and total is not None:
+        # Run the check even when no tax line was found (common on commercial
+        # invoices: FOB + freight + insurance). A missing tax counts as zero, so an
+        # unexplained difference is flagged for review rather than silently skipped.
         # Discounts are subtracted whether printed as "-100.00" or "100.00".
         expected = (Decimal(subtotal) - abs(Decimal(discount or "0"))
-                    + Decimal(shipping or "0") + Decimal(tax))
+                    + Decimal(shipping or "0") + Decimal(insurance or "0") + Decimal(tax or "0"))
         if abs(expected - Decimal(total)) > Decimal("0.02"):
             warnings.append(
-                "Subtotal plus tax (less discount, plus shipping) does not equal the extracted total; "
+                "Subtotal plus tax (less discount, plus shipping and insurance) does not equal the extracted total; "
                 "check discounts, shipping, fees, rounding, and the original invoice."
             )
             review_fields.update({"subtotal", "tax", "total"})

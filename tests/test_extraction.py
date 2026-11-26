@@ -220,3 +220,19 @@ def test_spanish_issue_date_and_abbreviated_month_are_supported():
         "Moneda: BZD\nSubtotal: 100.00\nIVA: 12.50\nTotal a pagar: 112.50"
     )
     assert result["fields"]["invoice_date"] == "2026-11-20"
+
+
+def test_arithmetic_check_runs_when_no_tax_line_is_printed():
+    """Regression (staging, 2026-11-26): the check was skipped whenever no tax line existed."""
+    text = "INVOICE\nInvoice No: CI-1\nCurrency: USD\nSubtotal: 1000.00\nFreight: 100.00\nTotal: 1150.00"
+    result = extract_invoice_fields(text)
+    assert any("does not equal the extracted total" in w for w in result["warnings"])
+    assert {"subtotal", "total"} <= set(result["fields_needing_review"])
+
+
+def test_freight_and_insurance_without_tax_add_up_cleanly():
+    text = ("COMMERCIAL INVOICE\nInvoice No: CI-2\nCurrency: USD\nSubtotal: 2607.00\n"
+            "Freight: 180.00\nInsurance: 25.00\nTotal: 2812.00")
+    result = extract_invoice_fields(text)
+    assert not any("does not equal the extracted total" in w for w in result["warnings"])
+    assert result["fields"]["tax"] is None  # nothing is invented
