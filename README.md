@@ -1,6 +1,8 @@
-# Quillvora API
+# RAMVORA Invoice Intelligence API
 
-A global invoice extraction API from Quillvora, built for businesses and developers processing invoices across markets and currencies. It accepts pasted invoice text, text-based PDFs, scanned PDFs, and common invoice photos, then returns structured JSON for review. It is designed for businesses and developers processing invoices across markets and currencies.
+*Built for what's next.*
+
+A global invoice extraction API from RAMVORA, built for businesses and developers processing invoices across markets and currencies. It accepts pasted invoice text, text-based PDFs, scanned PDFs, and common invoice photos, then returns structured JSON for review. It is designed for businesses and developers processing invoices across markets and currencies.
 
 > **Important:** This is an early-stage extraction tool, not accounting, tax, audit, or payment-approval software. OCR and rule-based extraction can make mistakes. Always compare results with the original invoice.
 
@@ -76,11 +78,11 @@ The response contains `fields`, `confidence`, `confidence_type`, `warnings`, `re
 ## Deploy with Docker
 
 ```bash
-docker build -t quillvora-api .
-docker run --rm -p 8000:8000 quillvora-api
+docker build -t ramvora-api .
+docker run --rm -p 8000:8000 ramvora-api
 ```
 
-A `render.yaml` is included for a simple Render Docker deployment. The customer-facing product brand is Quillvora; Divine Group Holdings LLC remains the legal company. After pushing the repository, create a new Blueprint in Render and select this repository. Confirm the service URL and test `/health` and `/docs`.
+A `render.yaml` is included for a simple Render Docker deployment. The customer-facing product brand is RAMVORA; Divine Group Holdings LLC remains the legal company. After pushing the repository, create a new Blueprint in Render and select this repository. Confirm the service URL and test `/health` and `/docs`.
 
 ## Development tests
 
