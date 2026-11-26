@@ -236,3 +236,15 @@ def test_freight_and_insurance_without_tax_add_up_cleanly():
     result = extract_invoice_fields(text)
     assert not any("does not equal the extracted total" in w for w in result["warnings"])
     assert result["fields"]["tax"] is None  # nothing is invented
+
+
+@pytest.mark.parametrize("label", ["Seller", "Supplier", "Exporter", "Vendedor", "Proveedor"])
+def test_labelled_supplier_is_returned_without_its_label(label):
+    """Regression (synthetic benchmark, 2026-11-26): 'Seller: X' returned the label too."""
+    text = f"COMMERCIAL INVOICE\n{label}: Harbor Point Trading Ltd\nBuyer: Island Hardware Ltd\nInvoice No: CI-9\nTotal: 10.00"
+    assert extract_invoice_fields(text)["fields"]["supplier_name"] == "Harbor Point Trading Ltd"
+
+
+def test_buyer_line_is_never_taken_as_supplier():
+    text = "Buyer: Island Hardware Ltd\nINVOICE\nInvoice No: CI-10\nTotal: 10.00"
+    assert extract_invoice_fields(text)["fields"]["supplier_name"] != "Buyer: Island Hardware Ltd"

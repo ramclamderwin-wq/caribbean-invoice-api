@@ -213,12 +213,30 @@ def _first_match(patterns: list[str], text: str) -> str | None:
     return None
 
 
+_SUPPLIER_LABEL = re.compile(
+    r"^\s*(?:seller|supplier|vendor|exporter|shipper|sold\s+by|from|issued\s+by|"
+    r"vendedor|proveedor|exportador|emisor|remitente)\s*[:\-]\s*(.+)$", re.I
+)
+_PARTY_LABEL = re.compile(
+    r"^\s*(?:buyer|importer|consignee|bill\s+to|sold\s+to|ship\s+to|customer|notify|"
+    r"comprador|importador|consignatario|cliente)\b", re.I
+)
+
+
 def _supplier(lines: list[str]) -> str | None:
+    # 1. An explicitly labelled supplier ("Seller: X", "Vendedor: X") wins, label removed.
+    for line in lines[:15]:
+        labelled = _SUPPLIER_LABEL.match(line)
+        if labelled and labelled.group(1).strip(" |\t"):
+            return labelled.group(1).strip(" |\t")[:160]
+    # 2. Otherwise the first plausible line near the top (the letterhead), never a buyer line.
     ignored = re.compile(
         r"\b(invoice|factura|receipt|statement|tax invoice|bill to|ship to|date|"
         r"invoice number|invoice no|invoice #|page \d+)\b", re.I
     )
     for line in lines[:10]:
+        if _PARTY_LABEL.match(line):
+            continue
         candidate = line.strip(" |\t")
         if len(candidate) >= 2 and not ignored.search(candidate):
             if not re.fullmatch(r"[-=*_ ]+", candidate):
