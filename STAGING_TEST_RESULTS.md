@@ -76,7 +76,7 @@ Known beta gaps on demo invoices: unit of measure is not captured; per-line orig
 |---|---|---|
 | 34 | Encrypted backup uploads to Cloudflare R2 (bucket `ramvora-backups-staging`, token scoped to that bucket) | PASS (`uploaded_to` set, SHA-256 recorded; no code change needed for R2) |
 | 35 | Scheduled backups enabled (`BACKUP_ENABLED=true`, every 24 h) | PASS (`scheduled: true`, `offsite_configured: true`, `encryption_configured: true`) |
-| 36 | Restore drill from the off-site copy into an isolated database | PENDING (owner downloads the newest object; restore run outside staging) |
+| 36 | Restore drill from the off-site copy into an isolated database | PASS (2026-11-26: newest R2 object `ramvora-20261126T202741215839Z` downloaded by the owner; SHA-256 matched the manifest; `python -m app.backup verify` ok; restored into a new scratch file, never over staging; `PRAGMA integrity_check` = ok, schema v2, 11 tables, all 6 customers with correct status/holds/revocation, webhook events, audit log and checkout records present, no raw keys stored). R2 lifecycle rule deletes objects after 400 days; local copies pruned 7 daily / 4 weekly / 12 monthly |
 
 ## Limits of what staging can show
 - Line-item extraction is now available as a **beta** endpoint (tests 30-31); accuracy on real invoices is unmeasured.
@@ -85,6 +85,5 @@ Known beta gaps on demo invoices: unit of measure is not captured; per-line orig
 
 ## Not yet tested on staging
 - Failed renewal / past-due grace (needs a Stripe test clock). Covered by unit tests.
-- Restore drill from the off-site copy (test 36).
 - `ADMIN_ALLOWED_IPS` not set yet (admin API is key-protected and rate-limited).
 - Sending email to addresses other than the Resend account owner: domain ramvora.io added to Resend, waiting for DNS records (status `not_started`).

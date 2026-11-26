@@ -139,3 +139,8 @@ Practise this on staging first; the commands are the same in production.
 - [ ] Restore drill on staging from the **offsite** copy, with timing recorded
 - [ ] Alert for missing or failed backups configured
 - [ ] Restore drill repeated at least quarterly
+
+### Evidence log
+| Date | Environment | Backup file | Checksum matched | Integrity | Result |
+|---|---|---|---|---|---|
+| 2026-11-26 | Staging (R2 `ramvora-backups-staging`) | `ramvora-20261126T202741215839Z.sqlite3.gz.enc` | yes | ok | PASS: restored into an isolated scratch database; customer, billing, audit and checkout data match staging at backup time |
