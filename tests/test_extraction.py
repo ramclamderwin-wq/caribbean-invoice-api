@@ -248,3 +248,27 @@ def test_labelled_supplier_is_returned_without_its_label(label):
 def test_buyer_line_is_never_taken_as_supplier():
     text = "Buyer: Island Hardware Ltd\nINVOICE\nInvoice No: CI-10\nTotal: 10.00"
     assert extract_invoice_fields(text)["fields"]["supplier_name"] != "Buyer: Island Hardware Ltd"
+
+
+def test_date_of_issue_label_is_an_invoice_date():
+    """Regression (public dataset eval, 2026-11-26)."""
+    text = "Invoice no: 97159829\nDate of issue: 09/18/2015\nTotal: 10.00"
+    assert extract_invoice_fields(text)["fields"]["invoice_date"] == "2015-09-18"
+
+
+def test_two_column_seller_client_labels_never_become_the_supplier():
+    """OCR of side-by-side columns reads 'Seller: Client:'. Return nothing rather than a label."""
+    text = "Invoice no: 1\nSeller: Client:\nBradley-Andrade Castro PLC\nTotal: 10.00"
+    assert extract_invoice_fields(text)["fields"]["supplier_name"] is None
+
+
+def test_summary_total_line_with_net_vat_gross():
+    text = "Invoice no: 1\nSUMMARY\nVAT [%] Net worth VAT Gross worth\nTotal $ 889,20 $ 88,92 $ 978,12"
+    fields = extract_invoice_fields(text)["fields"]
+    assert (fields["subtotal"], fields["tax"], fields["total"]) == ("889.20", "88.92", "978.12")
+
+
+def test_total_line_with_paid_and_balance_keeps_first_amount():
+    """The breakdown rule needs net + tax = gross; 'Total 100 Paid 100 Balance 0' is unchanged."""
+    text = "Invoice No: A-2\nTotal: 100.00 Paid: 100.00 Balance: 0.00"
+    assert extract_invoice_fields(text)["fields"]["total"] == "100.00"

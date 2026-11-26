@@ -189,11 +189,24 @@ def _normalise_date(raw: str | None) -> str | None:
     return None
 
 
+def _total_line_breakdown(text: str) -> tuple[str, str, str] | None:
+    for line in text.splitlines():
+        if not re.match(r"^\s*(?:grand\s+)?total\b(?!\s+(?:tax|vat|gst|iva)\b)", line, re.I):
+            continue
+        amounts = [_normalise_amount(a) for a in _amounts_in_line(line)]
+        amounts = [a for a in amounts if a is not None]
+        if len(amounts) >= 3:
+            net, vat, gross = (Decimal(a) for a in amounts[-3:])
+            if net > 0 and vat >= 0 and abs(net + vat - gross) <= Decimal("0.02"):
+                return amounts[-3], amounts[-2], amounts[-1]
+    return None
+
+
 def _invoice_date(text: str) -> tuple[str | None, bool]:
     lines = text.splitlines()
     # Explicit invoice-date labels take precedence. Due dates are never used.
     for line in lines:
-        if re.match(r"^\s*(?:invoice\s+date|date\s+of\s+invoice|fecha\s+de\s+factura|fecha\s+de\s+emisi[oó]n)\b", line, re.I):
+        if re.match(r"^\s*(?:invoice\s+date|date\s+of\s+invoice|date\s+of\s+issue|issue\s+date|date\s+issued|issued\s+on|fecha\s+de\s+factura|fecha\s+de\s+emisi[oó]n)\b", line, re.I):
             match = _DATE_TOKEN.search(line)
             if match:
                 return _normalise_date(match.group(1)), True
@@ -227,8 +240,12 @@ def _supplier(lines: list[str]) -> str | None:
     # 1. An explicitly labelled supplier ("Seller: X", "Vendedor: X") wins, label removed.
     for line in lines[:15]:
         labelled = _SUPPLIER_LABEL.match(line)
-        if labelled and labelled.group(1).strip(" |\t"):
-            return labelled.group(1).strip(" |\t")[:160]
+        if labelled:
+            value = labelled.group(1).strip(" |\t")
+            # Two-column layouts OCR as "Seller: Client:"; the value is a label, not a name.
+            if value and not _PARTY_LABEL.match(value) and not re.fullmatch(r"[\w .]{1,20}:", value):
+                return value[:160]
+            return None
     # 2. Otherwise the first plausible line near the top (the letterhead), never a buyer line.
     ignored = re.compile(
         r"\b(invoice|factura|receipt|statement|tax invoice|bill to|ship to|date|"
@@ -271,6 +288,16 @@ def extract_invoice_fields(raw_text: str) -> dict[str, Any]:
         text,
         r"(?:grand\s+total|total\s+due|amount\s+due|balance\s+due|invoice\s+total|total\s+a\s+pagar|importe\s+total|total)",
     )
+    # Summary tables often print net, tax and gross on one "Total" line
+    # ("Total $ 889,20 $ 88,92 $ 978,12"). Only when the last three amounts add up
+    # (net + tax = gross) is that line read as subtotal, tax and total.
+    breakdown = _total_line_breakdown(text)
+    if breakdown:
+        net, vat, gross = breakdown
+        if total in (None, net):
+            total = gross
+            subtotal = subtotal or net
+            tax = tax or vat
 
     currency = None
     # Prefer an explicit code/symbol attached to a monetary amount over
