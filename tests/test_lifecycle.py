@@ -367,3 +367,30 @@ def test_legacy_hold_status_is_migrated_to_hold_column(tmp_path, monkeypatch):
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     assert rows == [("a", "disputed", 0), ("b", None, 1)]
     assert version >= 2
+
+
+def test_dispute_arriving_before_checkout_still_holds_the_new_key(stripe_env, monkeypatch):
+    """Regression (staging, 2026-11-26): Stripe delivered charge.dispute.created before
+    checkout.session.completed, so the hold had no key to attach to and was lost."""
+    assert dispute(stripe_env, monkeypatch, "charge.dispute.created")["outcome"] == "pending_hold:disputed"
+    key, _, result = checkout(stripe_env, monkeypatch)
+    assert result["outcome"] == "email_delivered"
+    record = get_key_record(key)
+    assert record["access_hold_reason"] == "disputed" and record["active"] == 0
+    assert api_status(key) == 403
+
+
+def test_refund_arriving_before_checkout_still_holds_the_new_key(stripe_env, monkeypatch):
+    assert refund(stripe_env, monkeypatch, 1900)["outcome"] == "pending_hold:refunded"
+    key, _, _ = checkout(stripe_env, monkeypatch)
+    assert get_key_record(key)["access_hold_reason"] == "refunded"
+
+
+def test_pending_hold_is_applied_once(stripe_env, monkeypatch):
+    """After an admin clears the hold, a later re-subscription must not resurrect it."""
+    dispute(stripe_env, monkeypatch, "charge.dispute.created")
+    key, _, _ = checkout(stripe_env, monkeypatch)
+    from app.security import clear_access_hold
+    clear_access_hold(get_key_record(key)["id"])
+    key2, _, _ = checkout(stripe_env, monkeypatch, n=2)
+    assert get_key_record(key2)["access_hold_reason"] is None

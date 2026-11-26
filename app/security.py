@@ -221,6 +221,20 @@ def provision_checkout_key(
             (customer_id,),
         ).fetchone()
         hold_reason = held["access_hold_reason"] if held else None
+        if hold_reason is None:
+            # A refund/dispute that arrived before this checkout completed (out-of-order webhooks).
+            pending = conn.execute(
+                """SELECT event_id, outcome FROM stripe_webhook_events WHERE customer_id=?
+                   AND outcome LIKE 'pending_hold:%' ORDER BY event_created DESC LIMIT 1""",
+                (customer_id,),
+            ).fetchone()
+            if pending:
+                hold_reason = pending["outcome"].split(":", 1)[1]
+                conn.execute(
+                    """UPDATE stripe_webhook_events SET outcome='pending_hold_applied:' || substr(outcome, 14)
+                       WHERE customer_id=? AND outcome LIKE 'pending_hold:%'""",
+                    (customer_id,),
+                )
         raw_key = ("iia_test_" if os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_test_") else "iia_live_") + secrets.token_urlsafe(32)
         encrypted = fernet.encrypt(raw_key.encode("utf-8")).decode("ascii")
         cursor = conn.execute(
@@ -541,7 +555,9 @@ def apply_customer_hold_event(
                    WHERE stripe_customer_id=?""",
                 (reason, now, customer_id),
             ).rowcount
-            outcome = "hold_applied" if changed else "no_matching_customer"
+            # No key yet: Stripe can deliver a refund/dispute before checkout.session.completed
+            # (webhooks are not ordered). Remember the hold so the key is created held.
+            outcome = "hold_applied" if changed else f"pending_hold:{reason}"
         conn.execute(
             """INSERT INTO stripe_webhook_events(event_id,event_created,event_type,received_at,customer_id,outcome)
                VALUES (?,?,?,?,?,?)""",
