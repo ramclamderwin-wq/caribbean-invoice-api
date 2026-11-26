@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.coverage
+htmlcov/
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+.DS_Store
+
+# Pilot outputs and private customer files (never commit)
+pilot_runs/
+private/

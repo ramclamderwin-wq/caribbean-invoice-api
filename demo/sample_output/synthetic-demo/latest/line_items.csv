@@ -1,0 +1,14 @@
+﻿document,line_no,sku,description,hs_code_as_printed,country_of_origin,quantity,unit_of_measure,unit_price,line_total,currency,review_flags
+demo-001-en-standard.pdf,1,DB-100,Cordless drill 18V,8467.21,CN,50,pcs,32.50,1625.00,USD,
+demo-001-en-standard.pdf,2,DB-220,Drill bit set 10pc,8207.50,CN,200,sets,4.25,850.00,USD,
+demo-001-en-standard.pdf,3,DB-310,Safety goggles,9004.90,CN,120,pcs,1.10,132.00,USD,
+demo-001-en-standard.pdf,4,DB-415,Work gloves size L,6116.10,CN,300,pairs,0.85,255.00,USD,
+demo-002-es-factura.pdf,1,,Café molido 500g,,,100,,3.20,320.00,USD,
+demo-002-es-factura.pdf,2,,Azúcar morena 1kg,,,50,,1.80,90.00,USD,
+demo-002-es-factura.pdf,3,,Chocolate de mesa 250g,,,80,,2.10,168.00,USD,
+demo-003-eur-comma-decimals.pdf,1,BM-77,Ball bearing 6204,,,400,pcs,1.25,500.00,EUR,
+demo-003-eur-comma-decimals.pdf,2,BM-81,Hydraulic seal kit,,,25,sets,18.40,460.00,EUR,
+demo-004-with-errors.pdf,1,,Cotton T-shirt white,,,500,,2.40,1250.00,USD,line_total; quantity; unit_price
+demo-004-with-errors.pdf,2,,Cotton T-shirt black,,,300,,2.40,720.00,USD,
+demo-005-scanned-image.png,1,,Ceramic dinner plate 27cm,,,240,,3.50,840.00,USD,
+demo-005-scanned-image.png,2,,Ceramic mug 350ml,,,360,,1.75,630.00,USD,

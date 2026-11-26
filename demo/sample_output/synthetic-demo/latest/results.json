@@ -1,0 +1,396 @@
+{
+  "customer": "Synthetic Demo",
+  "engine": "rules",
+  "generated_at": "20261126T034024Z",
+  "results": {
+    "demo-001-en-standard.pdf": {
+      "schema_version": "commercial_invoice.v1",
+      "document_type": "commercial_invoice",
+      "seller": {
+        "name": "Demo Bright Tools Co., Ltd.",
+        "address": "No. 8 Example Industrial Rd, Shenzhen, China",
+        "tax_id": null
+      },
+      "buyer": {
+        "name": "Sample Hardware Imports Inc.",
+        "address": "100 Example Ave, Houston, TX, USA",
+        "tax_id": null
+      },
+      "invoice_number": "DBT-2026-0412",
+      "invoice_date": "2026-04-12",
+      "currency": "USD",
+      "incoterm": "FOB",
+      "incoterm_place": "Shenzhen",
+      "country_of_origin": "China",
+      "subtotal": "2862.00",
+      "discount": null,
+      "freight": "180.00",
+      "insurance": "25.00",
+      "tax": null,
+      "total": "3067.00",
+      "line_items": [
+        {
+          "description": "Cordless drill 18V",
+          "sku": "DB-100",
+          "hs_code_as_printed": "8467.21",
+          "quantity": "50",
+          "unit_of_measure": "pcs",
+          "unit_price": "32.50",
+          "line_total": "1625.00",
+          "currency": "USD",
+          "country_of_origin": "CN",
+          "line_no": 1,
+          "fields_needing_review": []
+        },
+        {
+          "description": "Drill bit set 10pc",
+          "sku": "DB-220",
+          "hs_code_as_printed": "8207.50",
+          "quantity": "200",
+          "unit_of_measure": "sets",
+          "unit_price": "4.25",
+          "line_total": "850.00",
+          "currency": "USD",
+          "country_of_origin": "CN",
+          "line_no": 2,
+          "fields_needing_review": []
+        },
+        {
+          "description": "Safety goggles",
+          "sku": "DB-310",
+          "hs_code_as_printed": "9004.90",
+          "quantity": "120",
+          "unit_of_measure": "pcs",
+          "unit_price": "1.10",
+          "line_total": "132.00",
+          "currency": "USD",
+          "country_of_origin": "CN",
+          "line_no": 3,
+          "fields_needing_review": []
+        },
+        {
+          "description": "Work gloves size L",
+          "sku": "DB-415",
+          "hs_code_as_printed": "6116.10",
+          "quantity": "300",
+          "unit_of_measure": "pairs",
+          "unit_price": "0.85",
+          "line_total": "255.00",
+          "currency": "USD",
+          "country_of_origin": "CN",
+          "line_no": 4,
+          "fields_needing_review": []
+        }
+      ],
+      "line_items_total": "2862.00",
+      "issues": [],
+      "fields_needing_review": [],
+      "review_required": true,
+      "classification": {
+        "hs_codes_inferred": false,
+        "note": "Tariff classification, duties and declarations are not determined by RAMVORA. hs_code_as_printed is copied only when printed on the invoice."
+      },
+      "extraction_metadata": {
+        "engine": "rules",
+        "method": "rule_based_text_extraction"
+      }
+    },
+    "demo-002-es-factura.pdf": {
+      "schema_version": "commercial_invoice.v1",
+      "document_type": "commercial_invoice",
+      "seller": {
+        "name": "Distribuidora Ejemplo S.A. de C.V.",
+        "address": "Av. Demostración 45, Monterrey, México",
+        "tax_id": null
+      },
+      "buyer": {
+        "name": "Importadora Muestra S.A.S.",
+        "address": "Calle 10 # 20-30, Bogotá, Colombia",
+        "tax_id": null
+      },
+      "invoice_number": "DE-7781",
+      "invoice_date": "2026-03-15",
+      "currency": "USD",
+      "incoterm": "CIF",
+      "incoterm_place": "Cartagena",
+      "country_of_origin": null,
+      "subtotal": "578.00",
+      "discount": null,
+      "freight": "40.00",
+      "insurance": null,
+      "tax": null,
+      "total": "618.00",
+      "line_items": [
+        {
+          "description": "Café molido 500g",
+          "sku": null,
+          "hs_code_as_printed": null,
+          "quantity": "100",
+          "unit_of_measure": null,
+          "unit_price": "3.20",
+          "line_total": "320.00",
+          "currency": "USD",
+          "country_of_origin": null,
+          "line_no": 1,
+          "fields_needing_review": []
+        },
+        {
+          "description": "Azúcar morena 1kg",
+          "sku": null,
+          "hs_code_as_printed": null,
+          "quantity": "50",
+          "unit_of_measure": null,
+          "unit_price": "1.80",
+          "line_total": "90.00",
+          "currency": "USD",
+          "country_of_origin": null,
+          "line_no": 2,
+          "fields_needing_review": []
+        },
+        {
+          "description": "Chocolate de mesa 250g",
+          "sku": null,
+          "hs_code_as_printed": null,
+          "quantity": "80",
+          "unit_of_measure": null,
+          "unit_price": "2.10",
+          "line_total": "168.00",
+          "currency": "USD",
+          "country_of_origin": null,
+          "line_no": 3,
+          "fields_needing_review": []
+        }
+      ],
+      "line_items_total": "578.00",
+      "issues": [],
+      "fields_needing_review": [],
+      "review_required": true,
+      "classification": {
+        "hs_codes_inferred": false,
+        "note": "Tariff classification, duties and declarations are not determined by RAMVORA. hs_code_as_printed is copied only when printed on the invoice."
+      },
+      "extraction_metadata": {
+        "engine": "rules",
+        "method": "rule_based_text_extraction"
+      }
+    },
+    "demo-003-eur-comma-decimals.pdf": {
+      "schema_version": "commercial_invoice.v1",
+      "document_type": "commercial_invoice",
+      "seller": {
+        "name": "Beispiel Maschinenteile GmbH",
+        "address": "Musterstrasse 1, Stuttgart, Germany",
+        "tax_id": null
+      },
+      "buyer": {
+        "name": "Example Engineering Supplies Ltd.",
+        "address": "Unit 4 Sample Park, Leeds, United Kingdom",
+        "tax_id": null
+      },
+      "invoice_number": "BM-2026-118",
+      "invoice_date": "2026-03-03",
+      "currency": "EUR",
+      "incoterm": "DAP",
+      "incoterm_place": "Leeds",
+      "country_of_origin": null,
+      "subtotal": "960.00",
+      "discount": null,
+      "freight": null,
+      "insurance": null,
+      "tax": "0.00",
+      "total": "960.00",
+      "line_items": [
+        {
+          "description": "Ball bearing 6204",
+          "sku": "BM-77",
+          "hs_code_as_printed": null,
+          "quantity": "400",
+          "unit_of_measure": "pcs",
+          "unit_price": "1.25",
+          "line_total": "500.00",
+          "currency": "EUR",
+          "country_of_origin": null,
+          "line_no": 1,
+          "fields_needing_review": []
+        },
+        {
+          "description": "Hydraulic seal kit",
+          "sku": "BM-81",
+          "hs_code_as_printed": null,
+          "quantity": "25",
+          "unit_of_measure": "sets",
+          "unit_price": "18.40",
+          "line_total": "460.00",
+          "currency": "EUR",
+          "country_of_origin": null,
+          "line_no": 2,
+          "fields_needing_review": []
+        }
+      ],
+      "line_items_total": "960.00",
+      "issues": [],
+      "fields_needing_review": [],
+      "review_required": true,
+      "classification": {
+        "hs_codes_inferred": false,
+        "note": "Tariff classification, duties and declarations are not determined by RAMVORA. hs_code_as_printed is copied only when printed on the invoice."
+      },
+      "extraction_metadata": {
+        "engine": "rules",
+        "method": "rule_based_text_extraction"
+      }
+    },
+    "demo-004-with-errors.pdf": {
+      "schema_version": "commercial_invoice.v1",
+      "document_type": "commercial_invoice",
+      "seller": {
+        "name": "Sample Textiles Trading Co.",
+        "address": null,
+        "tax_id": null
+      },
+      "buyer": null,
+      "invoice_number": "STT-0099",
+      "invoice_date": "2026-05-20",
+      "currency": "USD",
+      "incoterm": null,
+      "incoterm_place": null,
+      "country_of_origin": null,
+      "subtotal": "2100.00",
+      "discount": null,
+      "freight": null,
+      "insurance": null,
+      "tax": null,
+      "total": "2100.00",
+      "line_items": [
+        {
+          "description": "Cotton T-shirt white",
+          "sku": null,
+          "hs_code_as_printed": null,
+          "quantity": "500",
+          "unit_of_measure": null,
+          "unit_price": "2.40",
+          "line_total": "1250.00",
+          "currency": "USD",
+          "country_of_origin": null,
+          "line_no": 1,
+          "fields_needing_review": [
+            "line_total",
+            "quantity",
+            "unit_price"
+          ]
+        },
+        {
+          "description": "Cotton T-shirt black",
+          "sku": null,
+          "hs_code_as_printed": null,
+          "quantity": "300",
+          "unit_of_measure": null,
+          "unit_price": "2.40",
+          "line_total": "720.00",
+          "currency": "USD",
+          "country_of_origin": null,
+          "line_no": 2,
+          "fields_needing_review": []
+        }
+      ],
+      "line_items_total": "1970.00",
+      "issues": [
+        {
+          "severity": "warning",
+          "field": "line_items[1]",
+          "message": "Quantity x unit price (1200.00) does not equal the line total (1250.00)."
+        },
+        {
+          "severity": "warning",
+          "field": "buyer",
+          "message": "Buyer/importer was not identified."
+        },
+        {
+          "severity": "warning",
+          "field": "line_items",
+          "message": "Line totals add up to 1970.00, not the invoice subtotal 2100.00."
+        }
+      ],
+      "fields_needing_review": [
+        "buyer",
+        "line_items",
+        "subtotal"
+      ],
+      "review_required": true,
+      "classification": {
+        "hs_codes_inferred": false,
+        "note": "Tariff classification, duties and declarations are not determined by RAMVORA. hs_code_as_printed is copied only when printed on the invoice."
+      },
+      "extraction_metadata": {
+        "engine": "rules",
+        "method": "rule_based_text_extraction"
+      }
+    },
+    "demo-005-scanned-image.png": {
+      "schema_version": "commercial_invoice.v1",
+      "document_type": "commercial_invoice",
+      "seller": {
+        "name": "Example Ceramics Export Ltd.",
+        "address": null,
+        "tax_id": null
+      },
+      "buyer": {
+        "name": "Demo Home Goods Pty Ltd",
+        "address": null,
+        "tax_id": null
+      },
+      "invoice_number": "ECE-5531",
+      "invoice_date": "2026-02-09",
+      "currency": "USD",
+      "incoterm": null,
+      "incoterm_place": null,
+      "country_of_origin": null,
+      "subtotal": "1470.00",
+      "discount": null,
+      "freight": null,
+      "insurance": null,
+      "tax": null,
+      "total": "1470.00",
+      "line_items": [
+        {
+          "description": "Ceramic dinner plate 27cm",
+          "sku": null,
+          "hs_code_as_printed": null,
+          "quantity": "240",
+          "unit_of_measure": null,
+          "unit_price": "3.50",
+          "line_total": "840.00",
+          "currency": "USD",
+          "country_of_origin": null,
+          "line_no": 1,
+          "fields_needing_review": []
+        },
+        {
+          "description": "Ceramic mug 350ml",
+          "sku": null,
+          "hs_code_as_printed": null,
+          "quantity": "360",
+          "unit_of_measure": null,
+          "unit_price": "1.75",
+          "line_total": "630.00",
+          "currency": "USD",
+          "country_of_origin": null,
+          "line_no": 2,
+          "fields_needing_review": []
+        }
+      ],
+      "line_items_total": "1470.00",
+      "issues": [],
+      "fields_needing_review": [],
+      "review_required": true,
+      "classification": {
+        "hs_codes_inferred": false,
+        "note": "Tariff classification, duties and declarations are not determined by RAMVORA. hs_code_as_printed is copied only when printed on the invoice."
+      },
+      "extraction_metadata": {
+        "engine": "rules",
+        "method": "rule_based_text_extraction"
+      }
+    }
+  }
+}

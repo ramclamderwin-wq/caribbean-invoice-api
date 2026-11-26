@@ -1,37 +1,75 @@
+# Render Blueprint. Creating it starts PAID resources (starter web service +
+# persistent disk). Review current Render pricing first. See RENDER_STAGING.md.
+# Secrets marked `sync: false` are entered in the Render dashboard, never here.
 services:
   - type: web
-    name: quillvora-api
+    name: ramvora-api
     runtime: docker
     plan: starter
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeploy: false
     disk:
-      name: quillvora-data
+      name: ramvora-data
       mountPath: /var/data
       sizeGB: 1
     envVars:
+      # The container listens on 8000 (see Dockerfile CMD); tell Render explicitly.
+      - key: PORT
+        value: "8000"
       - key: DATABASE_PATH
         value: /var/data/invoice_api.db
       - key: API_ADMIN_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: "*"
+        value: ""
+      # Render has TWO proxy layers in front of the app (verified on staging 2026-11-26:
+      # with 1, the app saw a changing edge address; with 2, the real client).
+      - key: TRUSTED_PROXY_HOPS
+        value: "2"
+      # Your office/VPN IPs or CIDRs for /v1/admin (strongly recommended).
+      - key: ADMIN_ALLOWED_IPS
+        sync: false
+      - key: API_KEY_ENCRYPTION_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: STRIPE_PRICE_STARTER
-        value: price_1UfA89KqMzLsvG4ZAFDh3MJU
+        sync: false
       - key: STRIPE_PRICE_PROFESSIONAL
-        value: price_1UfA8MKqMzLsvG4Zhn16WocE
+        sync: false
       - key: STRIPE_PRICE_BUSINESS
-        value: price_1UfA8OKqMzLsvG4ZAM90zuJE
+        sync: false
       - key: CHECKOUT_SUCCESS_URL
         sync: false
       - key: CHECKOUT_CANCEL_URL
         sync: false
       - key: CUSTOMER_PORTAL_RETURN_URL
         sync: false
+      # Encrypted backups (BACKUP_RUNBOOK.md). Enable once the key is set.
+      - key: BACKUP_ENABLED
+        value: "false"
+      - key: BACKUP_DIR
+        value: /var/data/backups
+      - key: BACKUP_ENCRYPTION_KEY
+        sync: false
+      - key: BACKUP_S3_BUCKET
+        sync: false
+      - key: BACKUP_S3_ENDPOINT_URL
+        sync: false
+      - key: BACKUP_S3_REGION
+        sync: false
+      - key: BACKUP_S3_ACCESS_KEY_ID
+        sync: false
+      - key: BACKUP_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: PAYMENT_GRACE_HOURS
+        value: "72"
       - key: PLAN_STARTER_MONTHLY_LIMIT
         value: "1000"
       - key: PLAN_PROFESSIONAL_MONTHLY_LIMIT

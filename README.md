@@ -5,9 +5,11 @@
   </picture>
 </p>
 
-<p align="center"><em>Built for what's next.</em></p>
+<p align="center"><strong>RAMVORA Invoice Intelligence API</strong><br><em>Built for what's next.</em></p>
 
 # RAMVORA Invoice Intelligence API
+
+> **Direction (2026-11-25):** the initial market is customs brokers and importers processing commercial invoices. See [`docs/customs/`](docs/customs/README.md) for the product specification, validation programme and roadmap. This API remains the extraction engine.
 
 A global invoice extraction API from RAMVORA, built for businesses and developers processing invoices across markets and currencies. It accepts pasted invoice text, text-based PDFs, scanned PDFs, and common invoice photos, then returns structured JSON for review. It is designed for businesses and developers processing invoices across markets and currencies.
 
@@ -17,9 +19,9 @@ A global invoice extraction API from RAMVORA, built for businesses and developer
 
 - Extract supplier, invoice number, date, currency, subtotal, tax, and total.
 - Accept PDF, PNG, JPG/JPEG, WEBP, TIFF, and BMP uploads.
-- OCR scanned PDFs and phone photos with Tesseract.
-- Detect ISO currency codes explicitly printed on an invoice, including USD and BZD; otherwise currency remains unknown.
-- Return warnings when required fields are missing or subtotal plus tax does not match the total.
+- OCR scanned PDFs and phone photos with Tesseract (English and Spanish language data in the Docker image).
+- Detect explicit currency codes and symbols including BZD; ambiguous dollar symbols remain unknown.
+- Return warnings when required fields are missing, the date is ambiguous, the document looks like a credit note, or subtotal − discount + shipping + tax does not match the total.
 - Enforce upload-size and PDF-page limits.
 - Process uploads in memory; the API does not save invoice files to disk.
 
@@ -41,7 +43,7 @@ Open http://127.0.0.1:8000/docs.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+sudo apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -56,6 +58,8 @@ uvicorn app.main:app --reload
 | POST | `/v1/extract-text` | Extract from JSON text |
 | POST | `/v1/extract-file` | Extract from PDF or image upload |
 | POST | `/v1/extract-pdf` | Backward-compatible PDF upload route |
+| POST | `/v1/commercial-invoice/extract-text` | **Beta.** Seller, buyer, trade terms and line items from JSON text |
+| POST | `/v1/commercial-invoice/extract-file` | **Beta.** Same, from a PDF or image upload |
 
 ### Extract text example
 
@@ -72,15 +76,40 @@ curl -X POST http://127.0.0.1:8000/v1/extract-file \
   -F "file=@invoice-scan.pdf"
 ```
 
-The response contains `fields`, `confidence`, `confidence_type`, `warnings`, `review_required`, `extraction_metadata`, and `source` metadata. The confidence values are deliberately labeled heuristic presence indicators, not statistically calibrated probabilities or accuracy guarantees. Every invoice result requires review against the source document.
+The response contains `fields` (`supplier_name`, `invoice_number`, `invoice_date`, `currency`, `subtotal`, `tax`, `discount`, `shipping`, `total`), `confidence`, `confidence_type`, `warnings`, `review_required` (always true), `fields_needing_review` (missing, ambiguous or inconsistent fields to check first), `extraction_metadata` (including `document_type`: `invoice` or `credit_note`), and `source` metadata. Confidence is currently unavailable (null) because it has not been calibrated against a representative labelled invoice corpus. Every result must be reviewed against the original.
+
+### Commercial invoices with line items (beta)
+
+`POST /v1/commercial-invoice/extract-file` (multipart `file`) and
+`POST /v1/commercial-invoice/extract-text` (JSON `{"text": ...}`) return the
+`commercial_invoice.v1` schema: `seller`, `buyer`, `invoice_number`, `invoice_date`,
+`currency`, `incoterm`, `incoterm_place`, `country_of_origin`, `subtotal`, `discount`,
+`freight`, `insurance`, `tax`, `total`, `line_items` (description, SKU, quantity, unit of
+measure, unit price, line total, origin and `hs_code_as_printed` only when printed),
+`line_items_total`, `issues`, `fields_needing_review` and `review_required` (always true).
+
+- Same upload limits, OCR and **page billing** as `/v1/extract-file`; rejected uploads are not billed.
+- **Never invents values or tariff codes.** Row arithmetic and line-sum vs subtotal problems are
+  flagged in `issues`, never corrected.
+- At most `MAX_LINE_ITEMS` rows are returned (default 500; `line_items_truncated` is set beyond that).
+- Beta: rule-based table reading. Tables whose rows wrap onto several lines, rotated scans or rows
+  without a numeric quantity/price/total may be missed and are flagged for review. Accuracy on real
+  invoices has not been measured yet.
 
 ## Configuration
 
-- `MAX_UPLOAD_BYTES`: maximum upload size (default 15 MiB).
+- `MAX_UPLOAD_BYTES`: maximum invoice file size (default 15 MiB).
+- `MAX_WEBHOOK_BODY_BYTES`: maximum Stripe webhook request body (default 1 MiB).
+- `MAX_LINE_ITEMS`: maximum line items returned by the beta commercial-invoice endpoints (default 500).
 - `MAX_PDF_PAGES`: maximum PDF pages (default 20).
 - `MAX_IMAGE_PIXELS`: maximum image pixels (default 25 million).
+- `MAX_PDF_PAGE_PIXELS`: maximum rasterized pixels per scanned PDF page (default 16 million).
+- `MAX_OCR_PAGES`: maximum pages requiring OCR in one PDF (default 5).
+- `OCR_TIMEOUT_SECONDS`: timeout per OCR page/image (default 30 seconds).
+- `OCR_LANGUAGES`: Tesseract language codes (default `eng+spa`).
+- `MAX_CONCURRENT_FILE_JOBS`: concurrent file decode/OCR jobs (default 1).
 - `TESSERACT_CMD`: optional absolute path to the Tesseract executable.
-- `CORS_ORIGINS`: comma-separated allowed origins. Set explicit production origins before connecting a browser frontend.
+- `CORS_ORIGINS`: comma-separated allowed origins. Cross-origin access is disabled by default; set only exact frontend origins if needed.
 
 ## Deploy with Docker
 
@@ -89,27 +118,31 @@ docker build -t ramvora-api .
 docker run --rm -p 8000:8000 ramvora-api
 ```
 
-A `render.yaml` is included for a simple Render Docker deployment. The customer-facing product brand is RAMVORA; Divine Group Holdings LLC remains the legal company. After pushing the repository, create a new Blueprint in Render and select this repository. Confirm the service URL and test `/health` and `/docs`.
+A `render.yaml` is included for a simple Render Docker deployment. The public brand is RAMVORA (see `docs/brand/BRAND_GUIDE.md`); Divine Group Holdings LLC remains the legal company. After pushing the repository, create a new Blueprint in Render and select this repository. Confirm the service URL and test `/health` and `/docs`.
+
+## PDF dependency and licensing
+
+The runtime uses pypdfium2/PDFium for PDF text extraction and rendering instead of PyMuPDF. Review THIRD_PARTY_NOTICES.md and retain the upstream PDFium bundled license materials in any distributed container image. The exact wheel/build and bundled dependencies still require legal review before commercial launch.
 
 ## Development tests
 
 ```bash
-pip install pytest httpx
+pip install -r requirements-dev.txt
 pytest -q
 ```
 
-A test suite is included in `tests/test_extraction.py`.
+A test suite is included in `tests/`. Tests use synthetic invoices only; they do not establish real-world extraction accuracy.
 
 ## Next milestones before selling access
 
 1. Test OCR and extraction against permissioned real invoices from multiple industries, countries, layouts, and currencies.
 2. Improve extraction for line items, discounts, delivery charges, sales taxes, VAT/GST, and varied date formats.
-3. Add API-key authentication, per-customer usage limits, and key rotation.
-4. Add privacy and retention controls, customer data deletion, audit logs, and secure secret management.
-5. Add subscription billing only after authentication and usage metering are reliable.
+3. Build a representative benchmark of at least 200 permissioned real invoices and measure field-level accuracy by format, country, language, and layout.
+4. Complete privacy/terms, retention and deletion controls, operational logging, monitoring, backups and restore tests.
+5. Verify the full Stripe Sandbox lifecycle and a staging Render deployment before public paid access.
 6. Add an optional AI extraction provider behind a configurable interface, with strict privacy controls and validation.
 
-Do not put API secrets or customer invoices in source control. Do not use extracted data to automatically pay or approve invoices.
+Valid invoice uploads are metered by page count; failed uploads are rate-limited but not billed. Do not put API secrets or customer invoices in source control. Do not use extracted data to automatically pay or approve invoices.
 
 
 ## API authentication and customer usage
@@ -121,10 +154,11 @@ Authorization: Bearer iia_live_your_key
 ```
 
 - `POST /v1/extract-text` and `POST /v1/extract-file` require a valid key.
-- `GET /v1/usage` returns the current UTC calendar month's request count and remaining quota.
-- `POST /v1/admin/api-keys` creates a customer key. Protect this endpoint with the server-side `API_ADMIN_KEY` environment variable and the `X-Admin-Key` header.
-- Customer API keys are stored as SHA-256 hashes; the raw key is shown only once when created.
-- `DEFAULT_MONTHLY_LIMIT` sets the default monthly request allowance (default 1,000).
+- `GET /v1/usage` returns billable page usage for the active Stripe subscription billing period when Stripe period boundaries are present; a pasted-text request counts as one page. Legacy/non-subscription keys fall back to the UTC calendar month.
+- `DELETE /v1/account` cancels non-terminal Stripe subscriptions for the authenticated customer, then deletes that customer's local API keys, usage, checkout-delivery records, and recovery codes. Stripe may retain payment/invoice records as legally required.
+- `POST /v1/admin/api-keys` creates a customer key. All `/v1/admin/*` routes require `X-Admin-Key` (the server-side `API_ADMIN_KEY`, at least 32 characters), changes also require `X-Admin-Actor`, and every request is audited. See `ADMIN_GUIDE.md`.
+- Customer API keys are authenticated by SHA-256 hashes. A separately Fernet-encrypted copy is retained for webhook email retries; keep API_KEY_ENCRYPTION_KEY secret and backed up. Email-based recovery verifies a one-time code and rotates the key.
+- `DEFAULT_MONTHLY_LIMIT` sets the default monthly page allowance (default 1,000).
 - `DATABASE_PATH` sets the SQLite database file location. Production deployments must use persistent storage and backups.
 
 Example: create a customer key (run only from a trusted administrator environment):
@@ -133,12 +167,15 @@ Example: create a customer key (run only from a trusted administrator environmen
 curl -X POST https://YOUR_API_HOST/v1/admin/api-keys \
   -H "Content-Type: application/json" \
   -H "X-Admin-Key: $API_ADMIN_KEY" \
+  -H "X-Admin-Actor: Your Name" \
   -d '{"label":"Acme Books","monthly_limit":1000}'
 ```
 
 Open `/dashboard` on the deployed service to use the lightweight developer dashboard. It does not save API keys in browser storage.
 
 ## Render deployment notes
+
+Step-by-step staging instructions are in `RENDER_STAGING.md`. Every configuration variable is listed in `.env.example`. Administrator operations (customer review, access holds, billing events, audit log) are documented in `ADMIN_GUIDE.md`; backups in `BACKUP_RUNBOOK.md`; the security review in `SECURITY_REVIEW.md`; corrected Stripe plan wording in `STRIPE_PLAN_DESCRIPTIONS.md`; and launch recommendations in `COMMERCIAL_LAUNCH_PLAN.md`.
 
 The included Blueprint config uses a paid always-on service and a persistent disk because customer keys and usage records must survive restarts. Before creating the Blueprint, review Render's current service and disk charges. Set the secret `API_ADMIN_KEY` and a comma-separated `CORS_ORIGINS` value in Render's environment settings. Never commit secrets to GitHub.
 
@@ -147,23 +184,29 @@ The included Blueprint config uses a paid always-on service and a persistent dis
 Stripe Checkout is designed for public customer signup. New customers do not need an API key before choosing a plan.
 
 - `POST /v1/billing/checkout` — public endpoint accepting a plan and email, then returning a hosted Stripe Checkout URL.
-- `GET /v1/billing/claim?session_id=...` — verifies the completed Stripe subscription with Stripe and issues one API key once. The API key is stored as a hash and cannot be retrieved after the one-time claim.
-- `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an API key linked to a Stripe customer.
-- `POST /v1/billing/webhook` — verifies Stripe signatures and updates linked API-key access when a subscription changes or payment fails.
+- `POST /v1/billing/portal` — creates a Stripe Customer Portal session for an active API key linked to a Stripe customer.
+- `POST /v1/billing/recovery/request` — sends a short-lived verification code to the email on an eligible Stripe customer account.
+- `POST /v1/billing/recovery/confirm` — verifies the one-time code, rotates the API key in place, and emails the replacement. If the email provider fails, retry with the same code to deliver the same encrypted pending key without rotating again.
+- `POST /v1/keys/rotate` and `POST /v1/keys/revoke` — rotate or revoke the currently authenticated key.
+- `POST /v1/billing/webhook` — verifies Stripe signatures, deduplicates events, ignores older subscription events, maps current Stripe Price IDs to plan quotas, applies a configurable payment-failure grace period, suspends access on refunds/disputes and paused subscriptions, and emails newly provisioned keys on successful checkout.
 
-The dashboard at `/dashboard` contains plan selection and a one-time API-key claim screen. For now, the key is displayed on the post-checkout page; an email delivery provider has not yet been configured. Customers must copy and securely save the key when it appears.
+Checkout is disabled unless the API-key encryption key and email provider are configured. The signed Stripe webhook is the sole key-delivery path; the dashboard does not receive a Checkout session ID or claim token. The API key hash is used for authentication; a separately encrypted copy is retained so webhook retries can safely deliver the same key. Keep the encryption key backed up and secret.
 
 Planned subscription tiers (confirm the matching Stripe Sandbox products and prices before launch):
-- Starter: $19/month, 1,000 API requests.
-- Professional: $49/month, 5,000 API requests.
-- Business: $149/month, 20,000 API requests.
+- Starter: $19/month, 1,000 pages.
+- Professional: $49/month, 5,000 pages.
+- Business: $149/month, 20,000 pages.
 
 Required environment variables:
 - `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (keep these only in Render secret settings).
 - `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PROFESSIONAL`, `STRIPE_PRICE_BUSINESS`.
 - `CHECKOUT_SUCCESS_URL`, `CHECKOUT_CANCEL_URL`, `CUSTOMER_PORTAL_RETURN_URL`.
-- Optional quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
+- `API_KEY_ENCRYPTION_KEY`: a Fernet key. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`; store only in Render secret settings and keep a secure backup.
+- `RESEND_API_KEY` and `FROM_EMAIL`: a Resend API key and verified sender address.
+- `CHECKOUT_RATE_LIMIT` (default 5 requests/hour per client IP), `CLAIM_RATE_LIMIT` (default 10 requests/minute per client IP), and `PAYMENT_GRACE_HOURS` (default 72).
+- `RECOVERY_REQUEST_RATE_LIMIT` and `RECOVERY_CONFIRM_RATE_LIMIT` can override the default per-IP recovery throttles.
+- Optional page quotas: `PLAN_STARTER_MONTHLY_LIMIT` (1,000), `PLAN_PROFESSIONAL_MONTHLY_LIMIT` (5,000), `PLAN_BUSINESS_MONTHLY_LIMIT` (20,000).
 
-Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion and invoice payment failure events before testing subscription lifecycle. Stripe Tax remains disabled until the company determines its registration and collection obligations.
+Use Sandbox API keys and Sandbox Price IDs together for testing. Never put Stripe secrets in GitHub. Configure a webhook endpoint at `/v1/billing/webhook` for subscription update/deletion/pause/resume, invoice payment failed/paid, `charge.refunded`, and `charge.dispute.created`/`updated`/`closed` events before testing subscription lifecycle. Refunds suspend access; partial refunds and disputes require manual review before access can be restored. Configure Resend with a verified sender domain before enabling Checkout. Checkout key email delivery depends on the webhook and will retry on email-provider failure. Stripe Tax remains disabled until the company determines its registration and collection obligations.
 
-The customer self-signup code is under test and must pass CI and be deployed/configured before it is advertised as a working public service.
+Checkout remains disabled until the Resend sender, encryption key, Stripe secrets, and webhook endpoint are configured and tested. No Render deployment or live Stripe test has been performed. Draft legal documents are in `TERMS_DRAFT.md` and `PRIVACY_DRAFT.md`; they are not approved for publication and contain placeholders.

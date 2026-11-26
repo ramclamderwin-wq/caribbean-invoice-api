@@ -1,0 +1,26 @@
+{
+  "_readme": "TEMPLATE ONLY. Copy to a private folder (never commit real invoices or labels). One entry per invoice; use null or omit a field when it is not printed. 'correction_seconds' is optional: measured reviewer time per engine from the pilot.",
+  "documents": [
+    {
+      "file": "invoices/example-001.pdf",
+      "pages": 1,
+      "segment": "customs-broker-A",
+      "expected": {
+        "seller_name": "Example Exporter Co., Ltd.",
+        "buyer_name": "Example Importer Ltd.",
+        "invoice_number": "EX-2026-001",
+        "invoice_date": "2026-04-12",
+        "currency": "USD",
+        "incoterm": "FOB",
+        "subtotal": "2607.00",
+        "tax": null,
+        "total": "2812.00",
+        "line_items": [
+          {"description": "Cordless drill 18V", "sku": "TB-100", "quantity": "50", "unit_of_measure": "pcs",
+           "unit_price": "32.50", "line_total": "1625.00", "country_of_origin": "CN"}
+        ]
+      },
+      "correction_seconds": {"rules": null, "claude": null}
+    }
+  ]
+}
