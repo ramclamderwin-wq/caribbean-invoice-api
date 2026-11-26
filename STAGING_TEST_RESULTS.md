@@ -61,14 +61,22 @@ Synthetic demo invoices only; no real customer data. No secrets are recorded her
   outgoing traffic rotates across ~25 addresses (each stayed under the limit of 30/minute);
   covered by unit tests plus the address verification above.
 
+## Roadmap work (2026-11-26, later the same day)
+| # | Test | Result |
+|---|---|---|
+| 30 | Beta `POST /v1/commercial-invoice/extract-file` on demo invoices 001/002/004/005 | PASS (schema `commercial_invoice.v1`; demo-001: seller, buyer, FOB Shenzhen, origin China, freight 180, insurance 25, 4 line items with HS codes copied as printed; demo-004: wrong line total, missing buyer and line-sum mismatch flagged, not fixed) |
+| 31 | Beta endpoints require a key; listed in `/openapi.json` | PASS (401 without key) |
+| 32 | Labelled supplier ("Seller: X") returned without the label | PASS after fix `27cac1f` |
+| 33 | Dispute with Stripe test card 4000 0000 0000 0259 | **FAIL → fixed**: `charge.dispute.created` arrived before `checkout.session.completed`, so the hold was dropped. Fix `45a4836` remembers early refund/dispute holds and applies them when the key is created (exactly once). The pre-fix test customer was held manually by an admin (`manual_review`). End-to-end re-test needs one more dispute checkout. |
+
+Known beta gaps on demo invoices: unit of measure is not captured; per-line origin on demo-001 is missed.
+
 ## Limits of what staging can show
-- Line-item extraction (`commercial_invoice.v1`) is a prototype and not exposed as an API
-  endpoint, so line items and demo-004's line-level errors cannot be verified on staging.
+- Line-item extraction is now available as a **beta** endpoint (tests 30-31); accuracy on real invoices is unmeasured.
 - Backup **restore** was not run on staging: it needs shell access to the server (not available
   through the tools used), and no off-site copy exists yet. Restore is covered by automated tests.
 
 ## Not yet tested on staging
-- Dispute hold (needs a checkout with Stripe dispute test card 4000 0000 0000 0259).
 - Failed renewal / past-due grace (needs a Stripe test clock). Covered by unit tests.
 - Off-site backup upload and a restore drill from the off-site copy (no bucket yet).
 - `ADMIN_ALLOWED_IPS` not set yet (admin API is key-protected and rate-limited).
