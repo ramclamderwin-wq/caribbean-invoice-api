@@ -37,14 +37,14 @@ def fake_client(payload=PAYLOAD, stop_reason="end_turn"):
 
 
 def test_disabled_by_default(monkeypatch):
-    monkeypatch.delenv("QUILLVORA_AI_ENABLED", raising=False)
+    monkeypatch.delenv("RAMVORA_AI_ENABLED", raising=False)
     assert ai_enabled() is False
     with pytest.raises(AIEngineDisabled, match="disabled"):
         ClaudeExtractionEngine().extract(b"%PDF-1.4", ".pdf", data_sharing_confirmed=True)
 
 
 def test_requires_document_owner_permission_even_when_enabled(monkeypatch):
-    monkeypatch.setenv("QUILLVORA_AI_ENABLED", "true")
+    monkeypatch.setenv("RAMVORA_AI_ENABLED", "true")
     client, calls = fake_client()
     with pytest.raises(AIEngineDisabled, match="permission"):
         ClaudeExtractionEngine(client=client).extract(b"%PDF-1.4", ".pdf", data_sharing_confirmed=False)

@@ -44,24 +44,25 @@ only, after explicit approval.**
 
 ## Naming and repository strategy
 
-- **Company and brand: keep "Quillvora".** It is neutral and international, which fits
-  the worldwide strategy.
+- **Brand: RAMVORA** (owner decision 2026-11-26; replaces the earlier working name).
+  Tagline "Built for what's next." See `docs/brand/BRAND_GUIDE.md`. Divine Group Holdings
+  LLC remains the legal company.
 - **Product line:**
-  - "Quillvora for Customs" or "Quillvora Trade Documents" for the broker/importer
+  - "RAMVORA for Customs" or "RAMVORA Trade Documents" for the broker/importer
     workspace;
-  - "Quillvora API" for the engine sold to partners.
+  - "RAMVORA API" for the engine sold to partners.
 - **Public wording:** describe the product by function ("commercial invoices to
   structured customs data"), list supported currencies and languages, and avoid
   country-specific framing. Customer examples from any country can appear as case
   studies; none defines the market.
 - **Repository (recommendation, needs owner approval; not done):** the current name
   `caribbean-invoice-api` contradicts the worldwide positioning, so it should be renamed.
-  - Rename `caribbean-invoice-api` to `quillvora-engine` (or `quillvora-api`) after
+  - Rename `caribbean-invoice-api` to `ramvora-engine` (or `ramvora-api`) after
     PR #12 is resolved. GitHub keeps redirects from the old name, but update CI badges,
     Render settings and any links.
-  - Create the review workspace as a separate app (e.g. `quillvora-workspace`) that calls
+  - Create the review workspace as a separate app (e.g. `ramvora-workspace`) that calls
     the engine API, once Phase 2 is approved.
   - Don't rename now: it touches deployment configuration and is best done in one
     planned step.
-- **Code-level wording:** the code is already Quillvora-branded. `render.yaml` and the
+- **Code-level wording:** the code is already RAMVORA-branded. `render.yaml` and the
   README are neutral, except for one historical legal-entity mention in the README.

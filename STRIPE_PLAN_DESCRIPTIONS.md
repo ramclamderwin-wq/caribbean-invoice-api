@@ -17,18 +17,18 @@ description does **not** change prices, existing subscriptions or price IDs.
 
 ## Corrected product text
 
-**Quillvora Starter**
+**RAMVORA Starter**
 > 1,000 invoice pages per month — $19. Extract supplier, invoice number, date,
 > currency, subtotal, tax and total from PDFs, scans and photos. Each PDF page
 > counts as one page; an image or pasted text counts as one page. Results are
 > flagged for human review.
 
-**Quillvora Professional**
+**RAMVORA Professional**
 > 5,000 invoice pages per month — $49. Everything in Starter with a higher
 > monthly page allowance. Each PDF page counts as one page; an image or pasted
 > text counts as one page. Results are flagged for human review.
 
-**Quillvora Business**
+**RAMVORA Business**
 > 20,000 invoice pages per month — $149. Everything in Professional with the
 > highest monthly page allowance. Each PDF page counts as one page; an image or
 > pasted text counts as one page. Results are flagged for human review.

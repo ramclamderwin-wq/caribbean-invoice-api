@@ -13,7 +13,7 @@ Each backup:
 3. gzips and encrypts it with ``BACKUP_ENCRYPTION_KEY`` (Fernet: AES-128-CBC +
    HMAC-SHA256). That key must differ from ``API_KEY_ENCRYPTION_KEY`` and must
    be stored away from the backups (e.g. a password manager);
-4. writes ``quillvora-<UTC timestamp>.sqlite3.gz.enc`` plus a SHA-256 manifest
+4. writes ``ramvora-<UTC timestamp>.sqlite3.gz.enc`` plus a SHA-256 manifest
    to ``BACKUP_DIR``;
 5. optionally uploads both to S3-compatible storage (``BACKUP_S3_*``);
 6. prunes local copies: keep the newest daily, weekly and monthly backups.
@@ -40,7 +40,11 @@ from cryptography.fernet import Fernet, InvalidToken
 
 logger = logging.getLogger("invoice_api.backup")
 SUFFIX = ".sqlite3.gz.enc"
-PREFIX = "quillvora-"
+PREFIX = "ramvora-"
+# Backups written before the RAMVORA rebrand keep their old name; they are still
+# recognised for retention, listing and restore.
+LEGACY_PREFIXES = ("quillvora-",)
+_ALL_PREFIXES = (PREFIX, *LEGACY_PREFIXES)
 
 
 class BackupError(RuntimeError):
@@ -126,10 +130,11 @@ def create_backup(db_path: str | Path, backup_dir: str | Path, key: str | None =
 
 def _backup_time(path: Path) -> datetime | None:
     name = path.name
-    if not (name.startswith(PREFIX) and name.endswith(SUFFIX)):
+    prefix = next((p for p in _ALL_PREFIXES if name.startswith(p)), None)
+    if prefix is None or not name.endswith(SUFFIX):
         return None
     try:
-        return datetime.strptime(name[len(PREFIX):-len(SUFFIX)], "%Y%m%dT%H%M%S%fZ").replace(tzinfo=timezone.utc)
+        return datetime.strptime(name[len(prefix):-len(SUFFIX)], "%Y%m%dT%H%M%S%fZ").replace(tzinfo=timezone.utc)
     except ValueError:
         return None
 
@@ -158,7 +163,7 @@ def select_retained(paths: list[Path], keep_daily: int, keep_weekly: int, keep_m
 def prune_backups(backup_dir: str | Path, keep_daily: int = 7, keep_weekly: int = 4,
                   keep_monthly: int = 12) -> list[str]:
     backup_dir = Path(backup_dir)
-    backups = [p for p in backup_dir.glob(f"{PREFIX}*{SUFFIX}") if _backup_time(p)]
+    backups = [p for pre in _ALL_PREFIXES for p in backup_dir.glob(f"{pre}*{SUFFIX}") if _backup_time(p)]
     keep = select_retained(backups, keep_daily, keep_weekly, keep_monthly)
     removed = []
     for path in backups:
@@ -190,7 +195,7 @@ def upload_backup(result: BackupResult, client: Any | None = None) -> str | None
     bucket = os.getenv("BACKUP_S3_BUCKET")
     if not bucket:
         return None
-    prefix = os.getenv("BACKUP_S3_PREFIX", "quillvora/").lstrip("/")
+    prefix = os.getenv("BACKUP_S3_PREFIX", "ramvora/").lstrip("/")
     client = client or _s3_client()
     key = f"{prefix}{result.path.name}"
     client.upload_file(str(result.path), bucket, key,

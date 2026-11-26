@@ -1,7 +1,7 @@
 {
   "customer": "Synthetic Demo",
   "engine": "rules",
-  "generated_at": "20261125T022521Z",
+  "generated_at": "20261126T034024Z",
   "results": {
     "demo-001-en-standard.pdf": {
       "schema_version": "commercial_invoice.v1",
@@ -88,7 +88,7 @@
       "review_required": true,
       "classification": {
         "hs_codes_inferred": false,
-        "note": "Tariff classification, duties and declarations are not determined by Quillvora. hs_code_as_printed is copied only when printed on the invoice."
+        "note": "Tariff classification, duties and declarations are not determined by RAMVORA. hs_code_as_printed is copied only when printed on the invoice."
       },
       "extraction_metadata": {
         "engine": "rules",
@@ -167,7 +167,7 @@
       "review_required": true,
       "classification": {
         "hs_codes_inferred": false,
-        "note": "Tariff classification, duties and declarations are not determined by Quillvora. hs_code_as_printed is copied only when printed on the invoice."
+        "note": "Tariff classification, duties and declarations are not determined by RAMVORA. hs_code_as_printed is copied only when printed on the invoice."
       },
       "extraction_metadata": {
         "engine": "rules",
@@ -233,7 +233,7 @@
       "review_required": true,
       "classification": {
         "hs_codes_inferred": false,
-        "note": "Tariff classification, duties and declarations are not determined by Quillvora. hs_code_as_printed is copied only when printed on the invoice."
+        "note": "Tariff classification, duties and declarations are not determined by RAMVORA. hs_code_as_printed is copied only when printed on the invoice."
       },
       "extraction_metadata": {
         "engine": "rules",
@@ -319,7 +319,7 @@
       "review_required": true,
       "classification": {
         "hs_codes_inferred": false,
-        "note": "Tariff classification, duties and declarations are not determined by Quillvora. hs_code_as_printed is copied only when printed on the invoice."
+        "note": "Tariff classification, duties and declarations are not determined by RAMVORA. hs_code_as_printed is copied only when printed on the invoice."
       },
       "extraction_metadata": {
         "engine": "rules",
@@ -385,7 +385,7 @@
       "review_required": true,
       "classification": {
         "hs_codes_inferred": false,
-        "note": "Tariff classification, duties and declarations are not determined by Quillvora. hs_code_as_printed is copied only when printed on the invoice."
+        "note": "Tariff classification, duties and declarations are not determined by RAMVORA. hs_code_as_printed is copied only when printed on the invoice."
       },
       "extraction_metadata": {
         "engine": "rules",

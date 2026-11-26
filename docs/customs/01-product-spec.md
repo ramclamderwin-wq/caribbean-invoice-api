@@ -1,15 +1,15 @@
-# 1. Revised product specification: Quillvora Trade Documents
+# 1. Revised product specification: RAMVORA Trade Documents
 
 ## Positioning (recommendation)
 
-**Quillvora turns supplier commercial invoices into reviewed, structured line-item data
+**RAMVORA turns supplier commercial invoices into reviewed, structured line-item data
 for customs entries, in minutes instead of manual keying.**
 
 It is an invoice-intelligence and customs-documentation workspace for customs brokers and
-importers. The existing Quillvora API stays as the extraction engine underneath and remains
+importers. The existing RAMVORA API stays as the extraction engine underneath and remains
 available to software partners.
 
-Quillvora **prepares data**. It does not classify goods, calculate duties, or file
+RAMVORA **prepares data**. It does not classify goods, calculate duties, or file
 declarations. Those remain the licensed broker's decisions.
 
 ## Users
@@ -25,7 +25,7 @@ declarations. Those remain the licensed broker's decisions.
 ## Global by design
 
 - One platform for every country. Country-specific customs requirements are optional **country packs** and **export adapters** on top of a country-neutral document model (see `14-global-architecture.md`).
-- The default "generic" pack (CSV/XLSX export, no country rules) lets any customer anywhere use Quillvora from day one.
+- The default "generic" pack (CSV/XLSX export, no country rules) lets any customer anywhere use RAMVORA from day one.
 - Currencies: the current 22 for now (owner decision), expandable by configuration. Languages: English and Spanish via rules today; the AI engine is the path to worldwide languages.
 - No dependency on any one customs system (ASYCUDA, ACE, CDS and others are modules).
 

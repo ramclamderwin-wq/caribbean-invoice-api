@@ -1,4 +1,4 @@
-# Quillvora — replacement 20-account pilot prospect shortlist
+# RAMVORA — replacement 20-account pilot prospect shortlist
 Date: 24 November 2026
 Branch: `fix/production-readiness-p0-final`
 
@@ -67,7 +67,7 @@ ABF states that the list is current as of 14 March 2025 and some brokers have de
 
 1. Confirm each account's official website and current contact route; for Australian firms, confirm the current legal entity and customs-broker status because the ABF list is dated.
 2. Confirm target customer fit: recurring invoice volume, manual rekeying or checking pain, and willingness to test an external tool.
-3. Confirm whether they process supplier/commercial invoices in a way Quillvora can safely support; do not assume the product's extraction is validated for their documents.
+3. Confirm whether they process supplier/commercial invoices in a way RAMVORA can safely support; do not assume the product's extraction is validated for their documents.
 4. For UK enterprise firms, locate the right operations / customs compliance decision-maker; a generic contact form is not a qualified lead.
 5. Keep `owner_approval_to_contact=no` until the owner approves the batch. No outreach is authorised by this document.
 

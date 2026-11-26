@@ -142,7 +142,8 @@ def test_customer_emails_use_product_brand(monkeypatch):
         return Response()
 
     monkeypatch.setenv("RESEND_API_KEY", "re_test")
-    monkeypatch.setenv("FROM_EMAIL", "Quillvora <no-reply@example.com>")
+    monkeypatch.setenv("FROM_EMAIL", "RAMVORA <no-reply@example.com>")
     monkeypatch.setattr(email, "urlopen", fake_urlopen)
     email.send_api_key_email("buyer@example.com", "iia_test_abc")
-    assert "Quillvora" in sent["subject"] and "Invoice Intelligence" not in sent["text"]
+    assert "RAMVORA" in sent["subject"] and "RAMVORA Invoice Intelligence API" in sent["text"]
+    assert "RAMVORA" in sent["html"] and "Built for what" in sent["html"] and "<img" not in sent["html"]

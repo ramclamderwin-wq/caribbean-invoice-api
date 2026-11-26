@@ -13,7 +13,7 @@ unverified**.
 | **AutoEntry** | Per-document capture; line-item extraction costs extra credits | About £0.32–0.48 per document; line-item invoices use 2 credits (competitor-authored source) | Closest on line items, but no customs workflow |
 
 **Conclusion (recommendation):** these are **not direct competitors** for customs entry
-preparation, but they set price expectations for "document capture". Quillvora must
+preparation, but they set price expectations for "document capture". RAMVORA must
 justify a higher price through customs-specific value: line items, trade fields, customs
 checks and export formats.
 
@@ -36,7 +36,7 @@ checks and export formats.
 - **The niche is not empty.** Funded tools already turn commercial invoices into entries,
   mostly for the US/EU and large forwarders. At least one (Broker Genius) claims ASYCUDA
   output. "Customs invoice extraction" alone is not a moat.
-- **Possible gaps Quillvora can test:**
+- **Possible gaps RAMVORA can test:**
   1. **Small and mid-size brokers and importers worldwide** who are priced out of, or
      don't need, enterprise suites: a self-serve, affordable tool with no sales call or ERP.
      Countries with fewer specialised tools (e.g. many ASYCUDA countries) may convert faster.
@@ -45,7 +45,7 @@ checks and export formats.
   3. **Transparent per-invoice pricing**, where competitors mostly quote on request.
   4. **Review-first trust:** every value traceable to the document; no silent
      auto-classification.
-- **Evidence that would show Quillvora is not viable here:**
+- **Evidence that would show RAMVORA is not viable here:**
   - target brokers already use and like a competitor;
   - their real pain is classification or document chasing, not keying;
   - they won't pay at least the pilot price.

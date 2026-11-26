@@ -81,7 +81,7 @@ class CountryPack(Protocol):
 - **Packs are data-driven where possible:** required fields and validation rules as
   versioned config files, reviewed by a person who knows that country's rules.
 - **The "generic" pack is the default:** no country rules, CSV/XLSX export. Every customer
-  worldwide can use Quillvora with it from day one.
+  worldwide can use RAMVORA with it from day one.
 - **Prioritisation:** a pack is built only when paying customers in that country request
   it. Examples: an ACE partner-software import format for US brokers; a CDS intermediary
   format for the UK; an ASYCUDA World import format for countries that support it.

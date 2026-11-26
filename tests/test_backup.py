@@ -92,14 +92,14 @@ def test_backup_key_must_differ_from_api_key_encryption_key(env, monkeypatch):
 
 def test_retention_keeps_daily_weekly_monthly(tmp_path):
     start = datetime(2026, 1, 1, 3, 0, tzinfo=timezone.utc)
-    paths = [tmp_path / f"quillvora-{(start + timedelta(days=d)).strftime('%Y%m%dT%H%M%S%fZ')}.sqlite3.gz.enc"
+    paths = [tmp_path / f"ramvora-{(start + timedelta(days=d)).strftime('%Y%m%dT%H%M%S%fZ')}.sqlite3.gz.enc"
              for d in range(120)]
     keep = backup.select_retained(paths, keep_daily=7, keep_weekly=4, keep_monthly=3)
     newest = paths[-1]
     assert newest in keep
     assert set(paths[-7:]) <= keep            # last 7 days
     assert len(keep) <= 7 + 4 + 3
-    months = {datetime.strptime(p.name[10:32], "%Y%m%dT%H%M%S%fZ").month for p in keep}
+    months = {datetime.strptime(p.name[8:30], "%Y%m%dT%H%M%S%fZ").month for p in keep}
     assert len(months) >= 3
 
 

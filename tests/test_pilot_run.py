@@ -50,7 +50,7 @@ def test_rules_run_on_synthetic_demo(demo_dir, tmp_path):
 
 
 def test_ai_engine_is_locked_without_authorisation(demo_dir, tmp_path, monkeypatch):
-    monkeypatch.delenv("QUILLVORA_AI_ENABLED", raising=False)
+    monkeypatch.delenv("RAMVORA_AI_ENABLED", raising=False)
     with pytest.raises(SystemExit, match="confirm-data-sharing"):
         process_folder(demo_dir, tmp_path / "out", "X", engine="ai")
     with pytest.raises(SystemExit, match="disabled"):

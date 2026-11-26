@@ -279,7 +279,7 @@ def extract_commercial_invoice(raw_text: str) -> dict[str, Any]:
         "review_required": True,
         "classification": {
             "hs_codes_inferred": False,
-            "note": "Tariff classification, duties and declarations are not determined by Quillvora. "
+            "note": "Tariff classification, duties and declarations are not determined by RAMVORA. "
                     "hs_code_as_printed is copied only when printed on the invoice.",
         },
         "extraction_metadata": {"engine": "rules", "method": "rule_based_text_extraction"},
@@ -360,7 +360,7 @@ def validate_commercial_invoice(result: dict[str, Any], *, extra_uncertain: list
         "review_required": True,
         "classification": {
             "hs_codes_inferred": False,
-            "note": "Tariff classification, duties and declarations are not determined by Quillvora. "
+            "note": "Tariff classification, duties and declarations are not determined by RAMVORA. "
                     "hs_code_as_printed is copied only when printed on the invoice.",
         },
     })

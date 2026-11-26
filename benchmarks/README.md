@@ -1,11 +1,11 @@
-# Quillvora invoice benchmark
+# RAMVORA invoice benchmark
 
 This folder contains the CSV manifest template for a labelled extraction benchmark.
 The runner is in `scripts/benchmark_invoices.py`.
 
 ## What you need
 
-- A running Quillvora API with a test API key.
+- A running RAMVORA API with a test API key.
 - Permission to use each invoice in the test.
 - A ground-truth value for each field, checked against the original invoice.
 - Python 3.10+ and the `requests` package.
@@ -34,8 +34,8 @@ The benchmark runner uses the `requests` dependency already declared in `require
 Set the API address and test key in your shell rather than writing secrets into a file:
 
 ```bash
-export QUILLVORA_BASE_URL="https://YOUR-STAGING-API"
-export QUILLVORA_API_KEY="YOUR_TEST_API_KEY"
+export RAMVORA_BASE_URL="https://YOUR-STAGING-API"
+export RAMVORA_API_KEY="YOUR_TEST_API_KEY"
 python scripts/benchmark_invoices.py \
   --manifest /private/path/benchmark_manifest.csv \
   --output /private/path/benchmark_results.json

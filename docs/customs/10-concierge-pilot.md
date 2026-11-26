@@ -25,13 +25,13 @@ errors by hand.
    spreadsheet. **Record the corrected fields and minutes spent**, which is the real
    accuracy and cost data.
 4. **Deliver:** return `invoices.csv` + `line_items.csv` (or one Excel workbook with two
-   sheets) with the invoice's issues listed, and mark `review_status=quillvora_checked`.
+   sheets) with the invoice's issues listed, and mark `review_status=ramvora_checked`.
 5. **Customer review:**
    - the customer checks before using the data in their declaration;
    - they report any errors with a one-click form or reply;
    - each error is logged.
 
-No data enters any customs system from Quillvora. The broker remains responsible for the
+No data enters any customs system from RAMVORA. The broker remains responsible for the
 declaration.
 
 ## Onboarding (day 0–2)

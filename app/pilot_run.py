@@ -12,7 +12,7 @@ For each invoice in --input (PDF, PNG, JPG, JPEG, TIFF, BMP, WEBP) it extracts a
 - ``REVIEW_CHECKLIST.md``: what the reviewer must check before sending the files back.
 
 Engines: ``rules`` (default; local, no cost) or ``ai``. The AI engine stays disabled unless
-QUILLVORA_AI_ENABLED=true **and** --confirm-data-sharing is given (document-owner permission).
+RAMVORA_AI_ENABLED=true **and** --confirm-data-sharing is given (document-owner permission).
 Input files are never modified, moved or deleted.
 """
 from __future__ import annotations
@@ -63,7 +63,7 @@ def process_folder(input_dir: str | Path, output_dir: str | Path, customer: str,
         if not confirm_data_sharing:
             raise SystemExit("The AI engine needs --confirm-data-sharing (document-owner permission).")
         if ai_engine is None and not ai_enabled():
-            raise SystemExit("The AI engine is disabled. The owner must authorise it (QUILLVORA_AI_ENABLED=true).")
+            raise SystemExit("The AI engine is disabled. The owner must authorise it (RAMVORA_AI_ENABLED=true).")
         ai_engine = ai_engine or ClaudeExtractionEngine()
     elif engine != "rules":
         raise SystemExit(f"Unknown engine: {engine}")
@@ -135,7 +135,7 @@ def _write_checklist(run_dir: Path, customer: str, engine: str, log: list[dict[s
         "- [ ] Blank cells mean 'not printed on the invoice'. Do not fill them from memory or guesses.",
         "- [ ] `hs_code_as_printed` only if the invoice prints it. Never add tariff codes.",
         "- [ ] Record each correction and the minutes spent in the pilot error log.",
-        "- [ ] Set `review_status` to `quillvora_checked` and `reviewed_by` to your name.", "",
+        "- [ ] Set `review_status` to `ramvora_checked` and `reviewed_by` to your name.", "",
     ]
     if review:
         lines += ["## Flagged for review", ""]

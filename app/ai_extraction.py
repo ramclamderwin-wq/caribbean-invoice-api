@@ -5,7 +5,7 @@ Claude document/vision model, then applies the same validation as the rule engin
 
 It is switched off. It refuses to run unless **all** of the following hold:
 
-1. ``QUILLVORA_AI_ENABLED=true`` is set (owner authorisation to use a paid AI API);
+1. ``RAMVORA_AI_ENABLED=true`` is set (owner authorisation to use a paid AI API);
 2. the caller passes ``data_sharing_confirmed=True`` (the document owner allowed
    sending the file to the AI provider);
 3. Anthropic API credentials are available to the SDK (only checked when a call is made).
@@ -81,7 +81,10 @@ class AIEngineDisabled(RuntimeError):
 
 
 def ai_enabled() -> bool:
-    return os.getenv("QUILLVORA_AI_ENABLED", "").strip().lower() == "true"
+    # QUILLVORA_AI_ENABLED is the pre-rebrand name, still honoured so existing
+    # configuration keeps working.
+    value = os.getenv("RAMVORA_AI_ENABLED") or os.getenv("QUILLVORA_AI_ENABLED") or ""
+    return value.strip().lower() == "true"
 
 
 @dataclass
@@ -107,7 +110,7 @@ class ClaudeExtractionEngine:
         if not ai_enabled():
             raise AIEngineDisabled(
                 "The AI extraction engine is disabled. The owner must authorise paid AI use "
-                "(set QUILLVORA_AI_ENABLED=true) before it can run."
+                "(set RAMVORA_AI_ENABLED=true) before it can run."
             )
         import anthropic
         self._client = anthropic.Anthropic()

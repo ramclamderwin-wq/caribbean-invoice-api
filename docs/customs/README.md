@@ -1,4 +1,4 @@
-# Quillvora customs direction: deliverables index
+# RAMVORA customs direction: deliverables index
 
 Prepared 2026-11-25 for the change of initial market to **customs brokers and
 importers worldwide**. The product is global from day one (owner decision); focus is on the customer type, not a country. All documents separate:
@@ -44,7 +44,7 @@ Everything below about customers is a hypothesis until the validation programme 
 
 ## Preparation phase (2026-11-25, owner-approved)
 
-- AI extraction engine: `app/ai_extraction.py`, **disabled** (needs `QUILLVORA_AI_ENABLED=true` plus document-owner consent).
+- AI extraction engine: `app/ai_extraction.py`, **disabled** (needs `RAMVORA_AI_ENABLED=true` plus document-owner consent).
 - Concierge pilot tool: `python -m app.pilot_run --customer NAME --input FOLDER`.
 - Synthetic demo: `scripts/make_demo_invoices.py`, `demo/`.
 - Gate report: `scripts/validation_gates.py`.

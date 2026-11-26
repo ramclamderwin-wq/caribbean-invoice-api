@@ -1,14 +1,14 @@
-# Quillvora Privacy Notice — DRAFT FOR LEGAL REVIEW
+# RAMVORA Privacy Notice — DRAFT FOR LEGAL REVIEW
 
 **Not approved for publication.** Complete the placeholders, confirm retention periods and processor contracts, and obtain privacy counsel review before accepting customers.
 
-Controller: Divine Group Holdings LLC, a Wyoming limited liability company, doing business as Quillvora.  
+Controller: Divine Group Holdings LLC, a Wyoming limited liability company, doing business as RAMVORA (trade name subject to registration).  
 Privacy contact: [PRIVACY EMAIL]  
 Postal address: [LEGAL NOTICE ADDRESS]  
 Effective date: [DATE]
 
 ## 1. Information we process
-Depending on how you use Quillvora, we may process:
+Depending on how you use RAMVORA, we may process:
 - Account and billing identifiers, including email address, Stripe customer/subscription identifiers, API-key hashes, plan, and account status.
 - API usage events, timestamps, request metadata, security/rate-limit events, and diagnostic logs.
 - Invoice text, PDFs, and image files submitted for extraction.

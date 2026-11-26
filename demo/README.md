@@ -1,7 +1,7 @@
-# Quillvora demonstration (synthetic invoices)
+# RAMVORA demonstration (synthetic invoices)
 
 Everything in this folder is **synthetic**: fictional companies, numbers and goods, each
-marked "SYNTHETIC DEMO" in its footer. Use it to show prospects how Quillvora works
+marked "SYNTHETIC DEMO" in its footer. Use it to show prospects how RAMVORA works
 without touching any real customer document. It must never be used for accuracy claims.
 
 ## What's here

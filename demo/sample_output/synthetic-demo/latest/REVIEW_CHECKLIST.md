@@ -11,7 +11,7 @@ Engine: `rules`. Files: 5 (clean 4, needs review 1, errors 0). Model cost: US$0.
 - [ ] Blank cells mean 'not printed on the invoice'. Do not fill them from memory or guesses.
 - [ ] `hs_code_as_printed` only if the invoice prints it. Never add tariff codes.
 - [ ] Record each correction and the minutes spent in the pilot error log.
-- [ ] Set `review_status` to `quillvora_checked` and `reviewed_by` to your name.
+- [ ] Set `review_status` to `ramvora_checked` and `reviewed_by` to your name.
 
 ## Flagged for review
 

@@ -36,7 +36,9 @@ from app.extraction import extract_invoice_fields
 from app.admin import router as admin_router
 from app.net import client_ip
 
-APP_NAME = "Quillvora API"
+APP_NAME = "RAMVORA Invoice Intelligence API"
+APP_VERSION = "0.5.0"
+APP_TAGLINE = "Built for what's next."
 logger = logging.getLogger("invoice_api")
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
 MAX_WEBHOOK_BODY_BYTES = int(os.getenv("MAX_WEBHOOK_BODY_BYTES", str(1024 * 1024)))
@@ -87,8 +89,8 @@ async def lifespan(application: FastAPI):
 app = FastAPI(
     title=APP_NAME,
     lifespan=lifespan,
-    description="Quillvora extracts structured invoice data from text, PDFs, scanned PDFs, and invoice photos. Verify every result against the original.",
-    version="0.4.0",
+    description="RAMVORA Invoice Intelligence API extracts structured invoice and line-item data from text, PDFs, scanned PDFs and invoice photos. Verify every result against the original. Built for what's next.",
+    version=APP_VERSION,
 )
 class UploadBodySizeLimitMiddleware:
     """Reject oversized upload bodies before multipart parsing can spool them."""
@@ -574,7 +576,7 @@ async def add_security_headers(request: Request, call_next):
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"name": APP_NAME, "version": "0.4.0", "dashboard": "/dashboard", "docs": "/docs", "health": "/health"}
+    return {"name": APP_NAME, "version": APP_VERSION, "tagline": APP_TAGLINE, "dashboard": "/dashboard", "docs": "/docs", "health": "/health"}
 
 
 @app.get("/dashboard", include_in_schema=False)
@@ -592,7 +594,7 @@ def usage(key_record: dict[str, Any] = Depends(require_api_key)) -> dict[str, An
 async def health() -> dict[str, str]:
     if not database_health_check():
         raise HTTPException(status_code=503, detail="Database is unavailable.")
-    return {"status": "ok", "service": "quillvora-api"}
+    return {"status": "ok", "service": "ramvora-api"}
 
 
 @app.post("/v1/extract-text")

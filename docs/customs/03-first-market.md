@@ -1,6 +1,6 @@
 # 3. Global customer acquisition strategy
 
-**Owner direction:** Quillvora is a global platform. Interview locations are chosen for
+**Owner direction:** RAMVORA is a global platform. Interview locations are chosen for
 learning speed and access, and they never limit the market. This document replaces all
 earlier single-country recommendations.
 

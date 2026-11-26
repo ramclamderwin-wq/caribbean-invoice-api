@@ -15,7 +15,7 @@ not a sale.
 
 > Hi [First name], I'm researching how customs brokers and forwarders handle supplier
 > commercial invoices (keying line items, checking totals). Would you be open to sharing
-> your experience in a short call? No sales pitch. — [Your name], Quillvora
+> your experience in a short call? No sales pitch. — [Your name], RAMVORA
 
 ## 2. First email (broker or forwarder)
 
@@ -23,7 +23,7 @@ not a sale.
 
 > Hi [First name],
 >
-> I'm [Your name], founder of Quillvora. We're building software that turns supplier
+> I'm [Your name], founder of RAMVORA. We're building software that turns supplier
 > commercial invoices into structured line-item data for customs entries, and before we
 > build more, I want to learn from people who do this work every day.
 >
@@ -35,7 +35,7 @@ not a sale.
 > Would [two time options in their time zone] work?
 >
 > Thank you,
-> [Your name] · Quillvora · [website] · [phone]
+> [Your name] · RAMVORA · [website] · [phone]
 >
 > *If you'd prefer not to hear from me again, just reply "no thanks".*
 
@@ -75,7 +75,7 @@ not a sale.
 
 ## 7. Pilot offer (only after the owner approves terms and price)
 
-**Subject:** Proposal: 4-week Quillvora pilot for [Company]
+**Subject:** Proposal: 4-week RAMVORA pilot for [Company]
 
 > Hi [First name],
 >
@@ -87,7 +87,7 @@ not a sale.
 > - output in your preferred spreadsheet layout.
 >
 > The price is **US$[249]**, credited against your first [2] months if you continue.
-> Quillvora prepares data only; your team remains responsible for classification and
+> RAMVORA prepares data only; your team remains responsible for classification and
 > declarations.
 >
 > The pilot agreement is attached for your review. Would you like to start on [date]?

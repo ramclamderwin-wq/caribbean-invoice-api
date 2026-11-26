@@ -1,4 +1,4 @@
-# Quillvora — Stripe Sandbox test plan
+# RAMVORA — Stripe Sandbox test plan
 
 Status: **CI verified; Stripe end-to-end tests not yet executable**. A read-only inspection of the connected Divine Group Holdings LLC Stripe test-mode account found three active products and monthly prices. No credentials were read, no Stripe objects were changed, and no payment or subscription was created.
 
@@ -20,7 +20,7 @@ Do not paste keys into chat, GitHub, issue comments, screenshots, or source file
 
 ## Before the first Checkout test
 
-1. The connected test-mode account already has the three active Quillvora products and monthly prices listed below. Do not create duplicates.
+1. The connected test-mode account already has the three active RAMVORA products and monthly prices listed below. Do not create duplicates.
 2. Confirm the owner approves the proposed $19/$49/$149 monthly prices and the included page allowances before using Checkout. These are test-mode prices only; do not create or activate Live prices.
 3. Correct the product descriptions in Stripe Dashboard from “requests per month” to “pages per month” before customer-facing checkout; the API meters pages, so “requests” is inaccurate. This plan records the mismatch but does not change Stripe objects.
 4. Configure the test-mode webhook destination to the staging API's `/v1/billing/webhook`. No test-mode webhook endpoint currently exists. Subscribe only to events handled by the application:

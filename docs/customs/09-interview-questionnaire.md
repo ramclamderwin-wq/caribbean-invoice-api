@@ -2,7 +2,7 @@
 
 **Rules for the interviewer:**
 - Ask about **past behaviour and real numbers**, not opinions about a hypothetical product.
-- Do not mention Quillvora, AI or extraction until section F.
+- Do not mention RAMVORA, AI or extraction until section F.
 - Let silences run. Ask "Can you show me?" and "When did that last happen?"
 - 30–45 minutes. Record (with permission) or take verbatim notes.
 

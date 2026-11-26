@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a labelled invoice-extraction benchmark against a Quillvora API.
+"""Run a labelled invoice-extraction benchmark against a RAMVORA API.
 
 Manifest CSV columns:
 file,supplier_name,invoice_number,invoice_date,currency,subtotal,tax,total
@@ -95,17 +95,17 @@ def normalise(field: str, value: Any) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-url", default=os.getenv("QUILLVORA_BASE_URL"),
+    parser.add_argument("--base-url", default=os.getenv("RAMVORA_BASE_URL") or os.getenv("QUILLVORA_BASE_URL"),
                         help="API base URL, e.g. https://api.example.com")
-    parser.add_argument("--api-key", default=os.getenv("QUILLVORA_API_KEY"),
-                        help="API key; prefer QUILLVORA_API_KEY environment variable")
+    parser.add_argument("--api-key", default=os.getenv("RAMVORA_API_KEY") or os.getenv("QUILLVORA_API_KEY"),
+                        help="API key; prefer RAMVORA_API_KEY environment variable")
     parser.add_argument("--manifest", default="benchmark_manifest.csv")
     parser.add_argument("--output", default="benchmark_results.json")
     parser.add_argument("--timeout", type=int, default=120)
     args = parser.parse_args()
 
     if not args.base_url or not args.api_key:
-        parser.error("Set --base-url and --api-key (or QUILLVORA_BASE_URL and QUILLVORA_API_KEY).")
+        parser.error("Set --base-url and --api-key (or RAMVORA_BASE_URL and RAMVORA_API_KEY).")
 
     manifest = Path(args.manifest)
     if not manifest.is_file():

@@ -15,7 +15,7 @@ proceso**, no una venta.
 > Hola [Nombre], estoy investigando cómo las agencias aduanales y los agentes de carga
 > procesan las facturas comerciales de proveedores (captura de partidas, revisión de
 > totales). ¿Le interesaría compartir su experiencia en una llamada breve? Sin venta.
-> — [Su nombre], Quillvora
+> — [Su nombre], RAMVORA
 
 ## 2. Primer correo (agencia aduanal o agente de carga)
 
@@ -23,7 +23,7 @@ proceso**, no una venta.
 
 > Estimado/a [Nombre]:
 >
-> Soy [Su nombre], fundador de Quillvora. Estamos desarrollando un software que convierte
+> Soy [Su nombre], fundador de RAMVORA. Estamos desarrollando un software que convierte
 > las facturas comerciales de proveedores en datos estructurados por partida para los
 > pedimentos y declaraciones aduaneras. Antes de seguir construyendo, quiero aprender de
 > quienes hacen este trabajo todos los días.
@@ -36,7 +36,7 @@ proceso**, no una venta.
 > ¿Le funcionaría [dos opciones de horario en su zona horaria]?
 >
 > Saludos cordiales,
-> [Su nombre] · Quillvora · [sitio web] · [teléfono]
+> [Su nombre] · RAMVORA · [sitio web] · [teléfono]
 >
 > *Si prefiere no recibir más mensajes, responda "no, gracias".*
 
@@ -76,7 +76,7 @@ proceso**, no una venta.
 
 ## 7. Propuesta de piloto (solo con términos y precio aprobados por el propietario)
 
-**Asunto:** Propuesta: piloto de 4 semanas de Quillvora para [Empresa]
+**Asunto:** Propuesta: piloto de 4 semanas de RAMVORA para [Empresa]
 
 > Estimado/a [Nombre]:
 >
@@ -88,7 +88,7 @@ proceso**, no una venta.
 > - resultados en el formato de hoja de cálculo que usted prefiera.
 >
 > El precio es de **US$[249]**, que se descuentan de sus primeros [2] meses si continúa.
-> Quillvora solo prepara los datos; su equipo sigue siendo responsable de la
+> RAMVORA solo prepara los datos; su equipo sigue siendo responsable de la
 > clasificación arancelaria y de las declaraciones.
 >
 > Adjunto el acuerdo de piloto para su revisión. ¿Le gustaría comenzar el [fecha]?

@@ -66,7 +66,7 @@ def stripe_env(tmp_path, monkeypatch):
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
     monkeypatch.setenv("API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode())
     monkeypatch.setenv("RESEND_API_KEY", "re_test_placeholder")
-    monkeypatch.setenv("FROM_EMAIL", "Quillvora <no-reply@example.com>")
+    monkeypatch.setenv("FROM_EMAIL", "RAMVORA <no-reply@example.com>")
     monkeypatch.setenv("STRIPE_PRICE_STARTER", PRICES["starter"])
     monkeypatch.setenv("STRIPE_PRICE_PROFESSIONAL", PRICES["professional"])
     monkeypatch.setenv("STRIPE_PRICE_BUSINESS", PRICES["business"])

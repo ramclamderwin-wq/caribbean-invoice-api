@@ -3,13 +3,13 @@
 # Secrets marked `sync: false` are entered in the Render dashboard, never here.
 services:
   - type: web
-    name: quillvora-api
+    name: ramvora-api
     runtime: docker
     plan: starter
     healthCheckPath: /health
     autoDeploy: false
     disk:
-      name: quillvora-data
+      name: ramvora-data
       mountPath: /var/data
       sizeGB: 1
     envVars:

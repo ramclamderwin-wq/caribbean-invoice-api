@@ -16,7 +16,7 @@ checklist below is complete.
 3. Compresses it and encrypts it with `BACKUP_ENCRYPTION_KEY` (Fernet:
    AES-128-CBC plus HMAC-SHA256 authentication). The plaintext never touches disk
    outside a temporary directory.
-4. Writes `quillvora-<UTC timestamp>.sqlite3.gz.enc` plus a `.json` manifest with
+4. Writes `ramvora-<UTC timestamp>.sqlite3.gz.enc` plus a `.json` manifest with
    its SHA-256 checksum to `BACKUP_DIR` (files are `0600`, the directory `0700`).
 5. Uploads both files to S3-compatible storage when `BACKUP_S3_BUCKET` is set.
 6. Prunes local copies, keeping the newest backup for each of the last 7 days,
@@ -77,14 +77,14 @@ Practise this on staging first; the commands are the same in production.
    an isolated machine.
 3. **Verify it** (decrypts to a temporary file and checks integrity):
    ```bash
-   python -m app.backup verify /var/data/backups/quillvora-<stamp>.sqlite3.gz.enc
+   python -m app.backup verify /var/data/backups/ramvora-<stamp>.sqlite3.gz.enc
    ```
 4. **Restore it.** The checksum is verified against the manifest
    automatically. Restoring onto an existing database requires `--force`, and
    the current file (with its `-wal`/`-shm` files) is kept as
    `invoice_api.db.pre-restore-<UTC>`:
    ```bash
-   python -m app.backup restore /var/data/backups/quillvora-<stamp>.sqlite3.gz.enc \
+   python -m app.backup restore /var/data/backups/ramvora-<stamp>.sqlite3.gz.enc \
      --target /var/data/invoice_api.db --force
    ```
 5. **Start the service** and check `/health`, an API key, `/v1/usage` totals,

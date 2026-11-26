@@ -1,6 +1,6 @@
 # 13. Global market research: regions, segments, willingness to pay
 
-**Owner direction (2026-11-25):** Quillvora is a global company. Customs brokers and
+**Owner direction (2026-11-25):** RAMVORA is a global company. Customs brokers and
 importers are the first segment to investigate, not a geographic boundary. This document
 compares regions and segments to choose where to start acquiring customers.
 

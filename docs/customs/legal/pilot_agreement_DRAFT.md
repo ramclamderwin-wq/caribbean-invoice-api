@@ -1,4 +1,4 @@
-# DRAFT: Quillvora Pilot Services Agreement
+# DRAFT: RAMVORA Pilot Services Agreement
 
 > **FOR LEGAL REVIEW ONLY. NOT LEGAL ADVICE. NOT FOR SIGNATURE.**
 > This draft was prepared to brief a qualified lawyer. Bracketed items are placeholders
@@ -7,16 +7,16 @@
 > customers sign.
 
 **Parties:**
-- **[Divine Group Holdings LLC / Quillvora legal entity]**, [address] ("Quillvora"); and
+- **[Divine Group Holdings LLC / RAMVORA legal entity]**, [address] ("RAMVORA"); and
 - **[Customer legal name]**, [address] ("Customer").
 
 **Effective date:** [date]
 
 ## 1. Purpose and scope
 
-1.1 Quillvora will provide a time-limited pilot of its invoice data-extraction service
+1.1 RAMVORA will provide a time-limited pilot of its invoice data-extraction service
 (the "Pilot"). In the Pilot, Customer submits commercial invoices and related trade
-documents (the "Documents"). Quillvora returns structured data (the "Output") in a
+documents (the "Documents"). RAMVORA returns structured data (the "Output") in a
 spreadsheet format agreed with Customer.
 
 1.2 **Pilot limits:**
@@ -27,11 +27,11 @@ spreadsheet format agreed with Customer.
 
 Targets are goals, not guarantees.
 
-1.3 During the Pilot, Quillvora staff may review and correct Output before delivery.
+1.3 During the Pilot, RAMVORA staff may review and correct Output before delivery.
 
-## 2. What Quillvora does not do
+## 2. What RAMVORA does not do
 
-2.1 Quillvora **prepares data only**. Quillvora does not:
+2.1 RAMVORA **prepares data only**. RAMVORA does not:
 - (a) classify goods or determine tariff codes;
 - (b) calculate duties, taxes or fees;
 - (c) determine origin or customs value;
@@ -43,14 +43,14 @@ Documents before using it** for any declaration, filing, payment or business dec
 Customer and its licensed customs professionals remain solely responsible for all
 declarations and regulatory compliance.
 
-2.3 Values not printed on a Document are left blank. Quillvora does not infer missing values.
+2.3 Values not printed on a Document are left blank. RAMVORA does not infer missing values.
 
 ## 3. Fees
 
 3.1 Pilot fee: **US$[249]**, payable [in advance / on invoice within [14] days] by
 [method]. [Taxes as applicable.]
 
-3.2 If Customer subscribes to a Quillvora paid plan within [30] days after the Pilot ends,
+3.2 If Customer subscribes to a RAMVORA paid plan within [30] days after the Pilot ends,
 the Pilot fee is credited against the first [2] months' subscription fees. [Owner
 decision.]
 
@@ -58,7 +58,7 @@ decision.]
 
 ## 4. Customer responsibilities
 
-4.1 Customer confirms it has the right to share each Document with Quillvora for the
+4.1 Customer confirms it has the right to share each Document with RAMVORA for the
 Pilot, including any personal data the Documents contain, and has given any notices or
 obtained any consents its suppliers, customers or applicable law require.
 
@@ -73,23 +73,23 @@ measure and improve quality.
 5.1 Each party will keep the other's confidential information confidential and use it
 only for the Pilot. Documents and Output are Customer confidential information.
 
-5.2 Quillvora will process Documents only to provide the Pilot and to measure its own
+5.2 RAMVORA will process Documents only to provide the Pilot and to measure its own
 service quality, using appropriate technical and organisational security measures.
 These include encrypted storage, restricted access and audit logging.
 
-5.3 **Sub-processors:** Quillvora will list the service providers that may process
+5.3 **Sub-processors:** RAMVORA will list the service providers that may process
 Documents (for example hosting, email, backup storage) in [Annex A].
 **[Optional clause, Customer opt-in only:]** Customer [does / does not] authorise
-Quillvora to send Documents to [AI provider] for automated extraction under that
+RAMVORA to send Documents to [AI provider] for automated extraction under that
 provider's commercial terms, which [do not permit training on Customer data — counsel to
 verify current provider terms].
 
-5.4 **Retention:** Quillvora will delete Documents and Output within [30] days after the
+5.4 **Retention:** RAMVORA will delete Documents and Output within [30] days after the
 Pilot ends, unless Customer asks for earlier deletion or agrees in writing to retention
-for continued service. Quillvora may keep anonymised, aggregated quality metrics (for
+for continued service. RAMVORA may keep anonymised, aggregated quality metrics (for
 example error counts by field type) that do not identify Customer or any person.
 
-5.5 **Benchmark use:** Quillvora may use Documents to measure extraction accuracy **only
+5.5 **Benchmark use:** RAMVORA may use Documents to measure extraction accuracy **only
 if** Customer ticks the box in [Annex B / the Invoice Consent Form]. Documents are never
 published or shown to other customers.
 
@@ -98,20 +98,20 @@ processing agreement in [Annex C].
 
 ## 6. Intellectual property
 
-6.1 Customer owns its Documents and Output. Quillvora owns its software, models,
+6.1 Customer owns its Documents and Output. RAMVORA owns its software, models,
 templates and know-how, including improvements, provided they contain no Customer
 confidential information.
 
-6.2 Feedback may be used by Quillvora to improve its services without obligation.
+6.2 Feedback may be used by RAMVORA to improve its services without obligation.
 
 ## 7. Warranties and liability
 
-7.1 The Pilot is provided **"as is"** for evaluation. Quillvora warrants it will perform
+7.1 The Pilot is provided **"as is"** for evaluation. RAMVORA warrants it will perform
 the Pilot with reasonable care and skill. [Counsel: consumer and other non-excludable
 rights by jurisdiction.]
 
 7.2 **Limitation of liability (placeholder for counsel):**
-- Quillvora's total liability under this Agreement is limited to [the fees paid for the Pilot].
+- RAMVORA's total liability under this Agreement is limited to [the fees paid for the Pilot].
 - Neither party is liable for indirect or consequential loss, lost profits, penalties,
   duties, fines or storage charges, arising from use of Output **without Customer's
   review**.
@@ -143,5 +143,5 @@ business.
 - **C:** data processing agreement (where required);
 - **D:** output column layout agreed with Customer.
 
-**Signatures:** [Quillvora] / [Customer]: name, title, date. *(Not for signature until
+**Signatures:** [RAMVORA] / [Customer]: name, title, date. *(Not for signature until
 reviewed by counsel.)*

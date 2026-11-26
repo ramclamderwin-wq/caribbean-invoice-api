@@ -81,7 +81,7 @@ def rules_engine(path: Path) -> EngineResult:
 class ClaudeEngine:
     """Benchmark wrapper around app.ai_extraction.ClaudeExtractionEngine.
 
-    The CLI only builds this after --confirm-data-sharing and QUILLVORA_AI_ENABLED=true.
+    The CLI only builds this after --confirm-data-sharing and RAMVORA_AI_ENABLED=true.
     """
 
     def __init__(self, model: str = "claude-opus-5-5", effort: str = "medium", client: Any = None):
@@ -294,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("The claude engine sends documents to the Anthropic API. Re-run with "
                              "--confirm-data-sharing only if every document owner has given permission.")
             if not ai_enabled():
-                parser.error("The AI engine is disabled. Set QUILLVORA_AI_ENABLED=true only after the owner "
+                parser.error("The AI engine is disabled. Set RAMVORA_AI_ENABLED=true only after the owner "
                              "authorises paid AI usage.")
             engines["claude"] = ClaudeEngine(args.model, args.effort)
         else:

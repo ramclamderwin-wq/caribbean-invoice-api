@@ -1,6 +1,6 @@
 # Render staging deployment checklist
 
-A step-by-step guide to running Quillvora on Render in **Stripe test mode** before any
+A step-by-step guide to running RAMVORA on Render in **Stripe test mode** before any
 paid launch. Nothing here has been done yet; each step needs the owner's approval
 because it creates paid hosting or touches Stripe.
 
@@ -50,7 +50,7 @@ without you clicking **Manual Deploy**.
 Replace `<url>` with the `https://...onrender.com` address Render shows.
 
 ```bash
-curl https://<url>/health        # expect {"status":"ok","service":"quillvora-api"}
+curl https://<url>/health        # expect {"status":"ok","service":"ramvora-api"}
 curl https://<url>/              # service info
 ```
 
