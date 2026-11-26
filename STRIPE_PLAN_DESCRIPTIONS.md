@@ -1,9 +1,15 @@
-# Stripe plan descriptions: prepared, NOT applied
+# Stripe plan descriptions
 
-The Stripe products currently say "requests per month", but the API meters
-**pages**: each PDF page counts, and an image or pasted text counts as one page.
-The corrected text is below. **Nothing has been changed in Stripe.** Applying it
-needs the owner's approval.
+> **Status (2026-11-25): applied in TEST MODE only, by the owner.** The three
+> test-mode products are now named **RAMVORA Starter**, **RAMVORA Professional**
+> and **RAMVORA Business**, with the descriptions below. The owner re-checked
+> afterwards: prices, intervals, currency and price IDs are unchanged. No
+> products were created, archived or deleted. **Live mode has not been changed.**
+> Repeat the steps below in live mode only when you are ready to take real payments.
+
+The API meters **pages**: each PDF page counts, and an image or pasted text
+counts as one page. The product text below says so (the original Stripe text
+said "requests per month").
 
 The prices recorded in test mode already match the plan (see
 `STRIPE_SANDBOX_TEST_PLAN.md`), so only the wording changes. Editing a product's

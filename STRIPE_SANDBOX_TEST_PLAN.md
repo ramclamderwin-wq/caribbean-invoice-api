@@ -44,6 +44,8 @@ Do not paste keys into chat, GitHub, issue comments, screenshots, or source file
 
 All three are active monthly USD recurring prices in test mode. No webhook endpoints were found. Existing Stripe product descriptions say “requests per month”; the API's metering unit is pages, so those descriptions must be corrected before customer-facing checkout.
 
+**Update (2026-11-25):** the owner renamed the test-mode products to RAMVORA Starter, RAMVORA Professional and RAMVORA Business, and applied the page-based descriptions from `STRIPE_PLAN_DESCRIPTIONS.md`. Product IDs, price IDs and prices are unchanged. Live mode is untouched.
+
 ## Execution checklist
 
 Run each scenario with a unique test email/customer and record the Stripe event IDs, expected API result, observed API result, and evidence. Do not mark a test passed without verifying both Stripe state and API access state.
