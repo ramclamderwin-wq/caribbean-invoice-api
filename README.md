@@ -1,6 +1,13 @@
-# RAMVORA Invoice Intelligence API
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ramvora-wordmark-white.svg">
+    <img src="docs/brand/ramvora-wordmark.svg" alt="RAMVORA" width="320">
+  </picture>
+</p>
 
-*Built for what's next.*
+<p align="center"><em>Built for what's next.</em></p>
+
+# RAMVORA Invoice Intelligence API
 
 A global invoice extraction API from RAMVORA, built for businesses and developers processing invoices across markets and currencies. It accepts pasted invoice text, text-based PDFs, scanned PDFs, and common invoice photos, then returns structured JSON for review. It is designed for businesses and developers processing invoices across markets and currencies.
 
