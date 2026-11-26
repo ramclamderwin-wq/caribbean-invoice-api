@@ -23,6 +23,10 @@ future products.
 - **Construction:**
   - a geometric monoline wordmark drawn as vector paths, so it looks identical
     everywhere and doesn't depend on a font being installed;
+  - every letter sits on exactly the same cap height and baseline, with flat tops and
+    flat stroke ends, so pointed letters (A, M, V) are no taller or shorter than the
+    others. Only the O overshoots very slightly, as round letters must to look the
+    same size;
   - both **A**s are drawn as open **Λ** forms (no crossbar), echoing the **V**. This is
     the brand's signature detail;
   - the monogram is a white **R** on an ink tile, with a small accent square marking
