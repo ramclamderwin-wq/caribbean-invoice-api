@@ -7,7 +7,8 @@
 > customers sign.
 
 **Parties:**
-- **[Divine Group Holdings LLC / RAMVORA legal entity]**, [address] ("RAMVORA"); and
+
+- **Divine Group Holdings LLC**, a Wyoming limited liability company doing business as RAMVORA (trade name subject to registration), [REGISTERED AGENT / NOTICE ADDRESS, WYOMING], support@ramvora.io ("RAMVORA"); and
 - **[Customer legal name]**, [address] ("Customer").
 
 **Effective date:** [date]
@@ -20,6 +21,7 @@ documents (the "Documents"). RAMVORA returns structured data (the "Output") in a
 spreadsheet format agreed with Customer.
 
 1.2 **Pilot limits:**
+
 - term of [4 weeks] from [start date];
 - up to [150] Documents;
 - delivery target of [one business day] per Document received before [time,
@@ -32,11 +34,17 @@ Targets are goals, not guarantees.
 ## 2. What RAMVORA does not do
 
 2.1 RAMVORA **prepares data only**. RAMVORA does not:
-- (a) classify goods or determine tariff codes;
-- (b) calculate duties, taxes or fees;
-- (c) determine origin or customs value;
-- (d) prepare, sign or submit customs declarations;
-- (e) provide customs, legal or tax advice.
+
+
+(a) classify goods or determine tariff codes;
+
+(b) calculate duties, taxes or fees;
+
+(c) determine origin or customs value;
+
+(d) prepare, sign or submit customs declarations;
+
+(e) provide customs, legal or tax advice.
 
 2.2 Output may contain errors. **Customer must review Output against the original
 Documents before using it** for any declaration, filing, payment or business decision.
@@ -111,6 +119,7 @@ the Pilot with reasonable care and skill. [Counsel: consumer and other non-exclu
 rights by jurisdiction.]
 
 7.2 **Limitation of liability (placeholder for counsel):**
+
 - RAMVORA's total liability under this Agreement is limited to [the fees paid for the Pilot].
 - Neither party is liable for indirect or consequential loss, lost profits, penalties,
   duties, fines or storage charges, arising from use of Output **without Customer's
@@ -138,9 +147,10 @@ business.
 ---
 
 **Annexes:**
-- **A:** sub-processor list;
+
+- **A:** sub-processor list (see `docs/legal/DPA_DRAFT.md`, Annex 1);
 - **B:** benchmark-use consent (or the Invoice Consent Form);
-- **C:** data processing agreement (where required);
+- **C:** data processing agreement (`docs/legal/DPA_DRAFT.md`, where required);
 - **D:** output column layout agreed with Customer.
 
 **Signatures:** [RAMVORA] / [Customer]: name, title, date. *(Not for signature until
